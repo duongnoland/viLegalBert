@@ -14,53 +14,45 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ============================================================================
-# 🚀 GPU CONFIGURATION
+# 🚀 GPU SETUP & DEPENDENCIES
 # ============================================================================
 
 def setup_gpu():
-    """Thiết lập GPU cho Colab"""
-    try:
-        import torch
-        if torch.cuda.is_available():
-            gpu_name = torch.cuda.get_device_name(0)
-            gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
-            
-            print(f"✅ GPU: {gpu_name} ({gpu_memory:.1f} GB)")
-            
-            # Optimize PyTorch
-            torch.backends.cudnn.benchmark = True
-            os.environ['CUDA_LAUNCH_BLOCKING'] = '0'
-            
-            return True
-        else:
-            print("⚠️ GPU không khả dụng, sử dụng CPU")
-            return False
-            
-    except ImportError:
-        print("⚠️ PyTorch chưa được cài đặt")
+    """Setup GPU environment cho Linux"""
+    import torch
+    
+    if torch.cuda.is_available():
+        print("🚀 GPU CUDA available!")
+        print(f"📊 GPU Device: {torch.cuda.get_device_name(0)}")
+        print(f"📊 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+        
+        # Set default device
+        torch.cuda.set_device(0)
+        return True
+    else:
+        print("⚠️ GPU CUDA không available, sử dụng CPU")
         return False
 
-# ============================================================================
-# 📦 INSTALL DEPENDENCIES
-# ============================================================================
-
 def install_deps():
-    """Cài đặt dependencies cần thiết"""
-    try:
-        import sklearn
-        print("✅ scikit-learn đã sẵn sàng")
-    except ImportError:
-        os.system("pip install scikit-learn")
-        print("📦 Đã cài đặt scikit-learn")
+    """Cài đặt dependencies cho Linux"""
+    import subprocess
+    import sys
     
-    try:
-        import torch
-        if torch.cuda.is_available():
-            print("✅ PyTorch với CUDA đã sẵn sàng")
-        else:
-            os.system("pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118")
-    except ImportError:
-        os.system("pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118")
+    packages = [
+        "scikit-learn",
+        "pandas",
+        "numpy",
+        "joblib"
+    ]
+    
+    for package in packages:
+        try:
+            __import__(package.replace("-", "_"))
+            print(f"✅ {package} đã có sẵn")
+        except ImportError:
+            print(f"📦 Cài đặt {package}...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+            print(f"✅ {package} đã cài đặt xong")
 
 # Import sau khi cài đặt
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -75,31 +67,35 @@ import joblib
 # ============================================================================
 
 def create_dirs():
-    """Tạo thư mục cần thiết"""
+    """Tạo thư mục cho Linux"""
+    import os
+    
     dirs = [
-        'models/saved_models/level1_classifier/svm_level1',
-        'models/saved_models/level2_classifier/svm_level2',
-        'results/evaluation_results',
-        'logs'
+        "models/saved_models/level1_classifier/svm_level1",
+        "models/saved_models/level2_classifier/svm_level2",
+        "data/processed/dataset_splits"
     ]
     
-    for d in dirs:
-        Path(d).mkdir(parents=True, exist_ok=True)
-        print(f"✅ Tạo thư mục: {d}")
+    for dir_path in dirs:
+        os.makedirs(dir_path, exist_ok=True)
+        print(f"✅ Đã tạo thư mục: {dir_path}")
 
 # ============================================================================
 # 📊 DATASET LOADING
 # ============================================================================
 
 def check_splits():
-    """Kiểm tra dataset splits có sẵn"""
-    splits_dir = "data/processed/dataset_splits"
-    train_path = Path(splits_dir) / "train.csv"
-    val_path = Path(splits_dir) / "validation.csv"
-    test_path = Path(splits_dir) / "test.csv"
+    """Kiểm tra dataset splits có sẵn cho Linux"""
+    import os
     
-    if train_path.exists() and val_path.exists() and test_path.exists():
+    splits_dir = "data/processed/dataset_splits"
+    train_path = os.path.join(splits_dir, "train.csv")
+    val_path = os.path.join(splits_dir, "validation.csv")
+    test_path = os.path.join(splits_dir, "test.csv")
+    
+    if os.path.exists(train_path) and os.path.exists(val_path) and os.path.exists(test_path):
         # Load và hiển thị thông tin splits
+        import pandas as pd
         train_df = pd.read_csv(train_path, encoding='utf-8')
         val_df = pd.read_csv(val_path, encoding='utf-8')
         test_df = pd.read_csv(test_path, encoding='utf-8')

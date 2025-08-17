@@ -20,7 +20,7 @@ warnings.filterwarnings('ignore')
 # ============================================================================
 
 def setup_gpu():
-    """Setup GPU environment"""
+    """Setup GPU environment cho Linux"""
     import torch
     
     if torch.cuda.is_available():
@@ -36,7 +36,7 @@ def setup_gpu():
         return False
 
 def install_deps():
-    """Cài đặt dependencies"""
+    """Cài đặt dependencies cho Linux"""
     import subprocess
     import sys
     
@@ -415,20 +415,22 @@ def main():
     
     # Bước 3: Tạo thư mục
     print("\n🏗️ BƯỚC 3: TẠO THƯ MỤC")
-    Path("models/saved_models/hierarchical_models").mkdir(parents=True, exist_ok=True)
+    import os
+    os.makedirs("models/saved_models/hierarchical_models", exist_ok=True)
     
     # Bước 4: Kiểm tra splits
     print("\n🔄 BƯỚC 4: KIỂM TRA SPLITS")
     splits_dir = "data/processed/dataset_splits"
-    train_path = Path(splits_dir) / "train.csv"
-    val_path = Path(splits_dir) / "validation.csv"
-    test_path = Path(splits_dir) / "test.csv"
+    train_path = os.path.join(splits_dir, "train.csv")
+    val_path = os.path.join(splits_dir, "validation.csv")
+    test_path = os.path.join(splits_dir, "test.csv")
     
-    if not (train_path.exists() and val_path.exists() and test_path.exists()):
+    if not (os.path.exists(train_path) and os.path.exists(val_path) and os.path.exists(test_path)):
         print("❌ Dataset splits chưa có, vui lòng chạy main pipeline trước")
         return
     
     # Load và hiển thị thông tin splits
+    import pandas as pd
     train_df = pd.read_csv(train_path, encoding='utf-8')
     val_df = pd.read_csv(val_path, encoding='utf-8')
     test_df = pd.read_csv(test_path, encoding='utf-8')
