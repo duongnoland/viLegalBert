@@ -114,6 +114,28 @@ def load_dataset():
     
     return df
 
+def check_splits():
+    """Kiểm tra dataset splits có sẵn"""
+    splits_dir = "data/processed/dataset_splits"
+    train_path = Path(splits_dir) / "train.csv"
+    val_path = Path(splits_dir) / "validation.csv"
+    test_path = Path(splits_dir) / "test.csv"
+    
+    if train_path.exists() and val_path.exists() and test_path.exists():
+        # Load và hiển thị thông tin splits
+        train_df = pd.read_csv(train_path, encoding='utf-8')
+        val_df = pd.read_csv(val_path, encoding='utf-8')
+        test_df = pd.read_csv(test_path, encoding='utf-8')
+        
+        print(f"✅ Dataset splits đã có sẵn:")
+        print(f"📊 Train set: {len(train_df)} samples")
+        print(f"📊 Validation set: {len(val_df)} samples")
+        print(f"📊 Test set: {len(test_df)} samples")
+        return True
+    else:
+        print("⚠️ Dataset splits chưa có, sẽ tạo mới...")
+        return False
+
 def create_splits(df):
     """Tạo training splits"""
     splits_dir = "data/processed/dataset_splits"
@@ -128,7 +150,10 @@ def create_splits(df):
     val_df.to_csv(f"{splits_dir}/validation.csv", index=False, encoding='utf-8')
     test_df.to_csv(f"{splits_dir}/test.csv", index=False, encoding='utf-8')
     
-    print(f"✅ Splits: Train({len(train_df)}) Val({len(val_df)}) Test({len(test_df)})")
+    print(f"✅ Đã tạo splits mới:")
+    print(f"📊 Train set: {len(train_df)} samples")
+    print(f"📊 Validation set: {len(val_df)} samples")
+    print(f"📊 Test set: {len(test_df)} samples")
 
 # ============================================================================
 # 🏋️ SVM TRAINER
@@ -364,9 +389,11 @@ def main():
     if df is None:
         return
     
-    # Bước 5: Tạo splits
-    print("\n🔄 BƯỚC 5: TẠO SPLITS")
-    create_splits(df)
+    # Bước 5: Kiểm tra splits
+    print("\n🔄 BƯỚC 5: KIỂM TRA SPLITS")
+    if not check_splits():
+        print("\n🔄 BƯỚC 6: TẠO SPLITS")
+        create_splits(df)
     
     # Bước 6: Training SVM
     print("\n🏋️ BƯỚC 6: TRAINING SVM")

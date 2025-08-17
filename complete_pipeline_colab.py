@@ -136,6 +136,28 @@ class CompletePipeline:
         print(f"✅ Tìm thấy dataset: {dataset_path}")
         return dataset_path
     
+    def check_splits(self):
+        """Kiểm tra dataset splits có sẵn"""
+        splits_dir = "data/processed/dataset_splits"
+        train_path = Path(splits_dir) / "train.csv"
+        val_path = Path(splits_dir) / "validation.csv"
+        test_path = Path(splits_dir) / "test.csv"
+        
+        if train_path.exists() and val_path.exists() and test_path.exists():
+            # Load và hiển thị thông tin splits
+            train_df = pd.read_csv(train_path, encoding='utf-8')
+            val_df = pd.read_csv(val_path, encoding='utf-8')
+            test_df = pd.read_csv(test_path, encoding='utf-8')
+            
+            print(f"✅ Dataset splits đã có sẵn:")
+            print(f"📊 Train set: {len(train_df)} samples")
+            print(f"📊 Validation set: {len(val_df)} samples")
+            print(f"📊 Test set: {len(test_df)} samples")
+            return True
+        else:
+            print("⚠️ Dataset splits chưa có, sẽ tạo mới...")
+            return False
+    
     def create_splits(self, dataset_path):
         """Tạo training splits"""
         splits_dir = "data/processed/dataset_splits"
@@ -154,7 +176,10 @@ class CompletePipeline:
         val_df.to_csv(f"{splits_dir}/validation.csv", index=False, encoding='utf-8')
         test_df.to_csv(f"{splits_dir}/test.csv", index=False, encoding='utf-8')
         
-        print(f"✅ Splits: Train({len(train_df)}) Val({len(val_df)}) Test({len(test_df)})")
+        print(f"✅ Đã tạo splits mới:")
+        print(f"📊 Train set: {len(train_df)} samples")
+        print(f"📊 Validation set: {len(val_df)} samples")
+        print(f"📊 Test set: {len(test_df)} samples")
     
     def train_svm(self, dataset_path):
         """Training SVM models"""
@@ -399,9 +424,11 @@ class CompletePipeline:
             print("❌ Pipeline dừng do không tìm thấy dataset")
             return False
         
-        # Bước 5: Tạo splits
-        print("\n🔄 BƯỚC 5: TẠO SPLITS")
-        self.create_splits(dataset_path)
+        # Bước 5: Kiểm tra splits
+        print("\n🔄 BƯỚC 5: KIỂM TRA SPLITS")
+        if not self.check_splits():
+            print("\n🔄 BƯỚC 6: TẠO SPLITS")
+            self.create_splits(dataset_path)
         
         # Bước 6: Training các models
         print("\n🏋️ BƯỚC 6: TRAINING MODELS")
