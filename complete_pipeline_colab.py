@@ -8,7 +8,6 @@ Tích hợp SVM, PhoBERT, BiLSTM và Ensemble
 import os
 import pickle
 import pandas as pd
-from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -404,18 +403,19 @@ class CompletePipeline:
         print("\n🏋️ BƯỚC 5: TRAINING MODELS")
         training_success = True
         
-        dataset_path = f"{base_dir}/data/processed/hierarchical_legal_dataset.csv"
+        # ĐÚNG: Training chỉ trên train set
+        train_path = f"{base_dir}/data/processed/dataset_splits/train.csv"
         
         if 'svm' in self.config['train_models']:
-            if not self.train_svm(dataset_path):
+            if not self.train_svm(train_path):  # Chỉ training trên train set
                 training_success = False
         
         if 'phobert' in self.config['train_models']:
-            if not self.train_phobert(dataset_path):
+            if not self.train_phobert(train_path):  # Chỉ training trên train set
                 training_success = False
         
         if 'bilstm' in self.config['train_models']:
-            if not self.train_bilstm(dataset_path):
+            if not self.train_bilstm(train_path):  # Chỉ training trên train set
                 training_success = False
         
         if not training_success:

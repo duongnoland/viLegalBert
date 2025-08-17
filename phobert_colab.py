@@ -8,7 +8,6 @@ Phân loại văn bản pháp luật Việt Nam với PhoBERT
 import os
 import pickle
 import pandas as pd
-from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -222,8 +221,9 @@ class PhoBERTTrainer:
         eval_results = trainer.evaluate()
         
         # Lưu model
-        model_path = "models/saved_models/level1_classifier/phobert_level1/phobert_level1_model"
-        Path(model_path).parent.mkdir(parents=True, exist_ok=True)
+        base_dir = "/content/viLegalBert"
+        model_path = f"{base_dir}/models/saved_models/level1_classifier/phobert_level1/phobert_level1_model"
+        os.makedirs(os.path.dirname(model_path), exist_ok=True)
         
         trainer.save_model(model_path)
         self.tokenizer.save_pretrained(model_path)
@@ -317,8 +317,9 @@ class PhoBERTTrainer:
         eval_results = trainer.evaluate()
         
         # Lưu model
-        model_path = "models/saved_models/level2_classifier/phobert_level2/phobert_level2_model"
-        Path(model_path).parent.mkdir(parents=True, exist_ok=True)
+        base_dir = "/content/viLegalBert"
+        model_path = f"{base_dir}/models/saved_models/level2_classifier/phobert_level2/phobert_level2_model"
+        os.makedirs(os.path.dirname(model_path), exist_ok=True)
         
         trainer.save_model(model_path)
         self.tokenizer.save_pretrained(model_path)
@@ -388,12 +389,12 @@ def main():
     
     # Bước 6: Training Level 1
     print("\n🏷️ TRAINING LEVEL 1...")
-    dataset_path = f"{base_dir}/data/processed/hierarchical_legal_dataset.csv"
-    results_level1 = trainer.train_level1(dataset_path)
+    train_path = f"{base_dir}/data/processed/dataset_splits/train.csv"
+    results_level1 = trainer.train_level1(train_path)  # Chỉ training trên train set
     
     # Bước 7: Training Level 2
     print("\n🏷️ TRAINING LEVEL 2...")
-    results_level2 = trainer.train_level2(dataset_path)
+    results_level2 = trainer.train_level2(train_path)  # Chỉ training trên train set
     
     # Tóm tắt kết quả
     print("\n🎉 PHOBERT TRAINING HOÀN THÀNH!")

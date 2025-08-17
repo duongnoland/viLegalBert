@@ -9,7 +9,6 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
-from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -192,7 +191,9 @@ class SVMTrainer:
         self.vectorizers['level1'] = vectorizer
         self.feature_selectors['level1'] = feature_selector
         
-        model_path = "models/saved_models/level1_classifier/svm_level1/svm_level1_model.pkl"
+        # ĐÚNG: Sử dụng base_dir cho model path
+        base_dir = "/content/viLegalBert"
+        model_path = f"{base_dir}/models/saved_models/level1_classifier/svm_level1/svm_level1_model.pkl"
         model_data = {
             'model': svm, 'vectorizer': vectorizer, 'feature_selector': feature_selector,
             'config': self.config, 'gpu_optimized': self.use_gpu
@@ -248,7 +249,9 @@ class SVMTrainer:
         self.vectorizers['level2'] = vectorizer
         self.feature_selectors['level2'] = feature_selector
         
-        model_path = "models/saved_models/level2_classifier/svm_level2/svm_level2_model.pkl"
+        # ĐÚNG: Sử dụng base_dir cho model path
+        base_dir = "/content/viLegalBert"
+        model_path = f"{base_dir}/models/saved_models/level2_classifier/svm_level2/svm_level2_model.pkl"
         model_data = {
             'model': svm, 'vectorizer': vectorizer, 'feature_selector': feature_selector,
             'config': self.config, 'gpu_optimized': self.use_gpu
@@ -268,6 +271,9 @@ def evaluate_models(test_path):
     """Đánh giá models trên test set"""
     print("📊 Đánh giá models...")
     
+    # Base directory cho Google Colab
+    base_dir = "/content/viLegalBert"
+    
     # Load test data
     test_df = pd.read_csv(test_path, encoding='utf-8')
     X_test = test_df['text'].fillna('')
@@ -276,7 +282,8 @@ def evaluate_models(test_path):
     
     try:
         # Load và evaluate Level 1
-        with open("models/saved_models/level1_classifier/svm_level1/svm_level1_model.pkl", 'rb') as f:
+        level1_model_path = f"{base_dir}/models/saved_models/level1_classifier/svm_level1/svm_level1_model.pkl"
+        with open(level1_model_path, 'rb') as f:
             level1_data = pickle.load(f)
         
         level1_model = level1_data['model']
@@ -291,7 +298,8 @@ def evaluate_models(test_path):
         print(f"🏷️ Level 1 Test Accuracy: {accuracy_level1:.4f}")
         
         # Load và evaluate Level 2
-        with open("models/saved_models/level2_classifier/svm_level2/svm_level2_model.pkl", 'rb') as f:
+        level2_model_path = f"{base_dir}/models/saved_models/level2_classifier/svm_level2/svm_level2_model.pkl"
+        with open(level2_model_path, 'rb') as f:
             level2_data = pickle.load(f)
         
         level2_model = level2_data['model']
@@ -311,7 +319,7 @@ def evaluate_models(test_path):
             'level2': {'accuracy': accuracy_level2, 'gpu_optimized': level2_data.get('gpu_optimized', False)}
         }
         
-        results_path = "results/evaluation_results/svm_evaluation_results.pkl"
+        results_path = f"{base_dir}/results/evaluation_results/svm_evaluation_results.pkl"
         with open(results_path, 'wb') as f:
             pickle.dump(results, f)
         
@@ -356,9 +364,10 @@ def main():
     print("\n🏋️ BƯỚC 5: TRAINING SVM")
     trainer = SVMTrainer()
     
-    dataset_path = f"{base_dir}/data/processed/hierarchical_legal_dataset.csv"
-    results_level1 = trainer.train_level1(dataset_path)
-    results_level2 = trainer.train_level2(dataset_path)
+    # ĐÚNG: Training chỉ trên train set
+    train_path = f"{base_dir}/data/processed/dataset_splits/train.csv"
+    results_level1 = trainer.train_level1(train_path)  # Chỉ training trên train set
+    results_level2 = trainer.train_level2(train_path)  # Chỉ training trên train set
     
     # Bước 6: Evaluation
     print("\n📊 BƯỚC 6: EVALUATION")
@@ -366,7 +375,7 @@ def main():
     
     # Tóm tắt
     print("\n🎉 PIPELINE HOÀN THÀNH!")
-    print(f"📊 Dataset: {dataset_path}")
+    print(f"📊 Dataset: {train_path}") # Changed to train_path
     print(f"🏷️ Level 1 Accuracy: {results_level1['accuracy']:.4f}")
     print(f"🏷️ Level 2 Accuracy: {results_level2['accuracy']:.4f}")
     print(f"🚀 GPU Status: {'✅ Available' if gpu_available else '❌ Not Available'}")

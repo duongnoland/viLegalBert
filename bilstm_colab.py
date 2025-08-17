@@ -8,7 +8,6 @@ Phân loại văn bản pháp luật Việt Nam với BiLSTM
 import os
 import pickle
 import pandas as pd
-from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -337,7 +336,7 @@ class BiLSTMTrainer:
                 break
         
         # Load best model
-        if Path('best_bilstm_model.pth').exists():
+        if os.path.exists('best_bilstm_model.pth'):
             self.model.load_state_dict(torch.load('best_bilstm_model.pth', map_location=self.device))
             print(f"✅ Loaded best model")
         
@@ -393,8 +392,9 @@ class BiLSTMTrainer:
         history = self.train_model(train_loader, val_loader, num_classes)
         
         # Save model
-        model_path = "models/saved_models/level1_classifier/bilstm_level1/bilstm_level1_model.pkl"
-        Path(model_path).parent.mkdir(parents=True, exist_ok=True)
+        base_dir = "/content/viLegalBert"
+        model_path = f"{base_dir}/models/saved_models/level1_classifier/bilstm_level1/bilstm_level1_model.pkl"
+        os.makedirs(os.path.dirname(model_path), exist_ok=True)
         
         model_data = {
             'model_state_dict': self.model.state_dict(),
@@ -461,8 +461,9 @@ class BiLSTMTrainer:
         history = self.train_model(train_loader, val_loader, num_classes)
         
         # Save model
-        model_path = "models/saved_models/level2_classifier/bilstm_level2/bilstm_level2_model.pkl"
-        Path(model_path).parent.mkdir(parents=True, exist_ok=True)
+        base_dir = "/content/viLegalBert"
+        model_path = f"{base_dir}/models/saved_models/level2_classifier/bilstm_level2/bilstm_level2_model.pkl"
+        os.makedirs(os.path.dirname(model_path), exist_ok=True)
         
         model_data = {
             'model_state_dict': self.model.state_dict(),
@@ -533,12 +534,12 @@ def main():
     
     # Bước 6: Training Level 1
     print("\n🏷️ TRAINING LEVEL 1...")
-    dataset_path = f"{base_dir}/data/processed/hierarchical_legal_dataset.csv"
-    results_level1 = trainer.train_level1(dataset_path)
+    train_path = f"{base_dir}/data/processed/dataset_splits/train.csv"
+    results_level1 = trainer.train_level1(train_path)  # Chỉ training trên train set
     
     # Bước 7: Training Level 2
     print("\n🏷️ TRAINING LEVEL 2...")
-    results_level2 = trainer.train_level2(dataset_path)
+    results_level2 = trainer.train_level2(train_path)  # Chỉ training trên train set
     
     # Tóm tắt kết quả
     print("\n🎉 BILSTM TRAINING HOÀN THÀNH!")
