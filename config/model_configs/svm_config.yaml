@@ -1,0 +1,237 @@
+# 🚀 Cấu hình mô hình SVM cho viLegalBert
+# Phân loại văn bản pháp luật Việt Nam
+
+# ============================================================================
+# THÔNG TIN MÔ HÌNH
+# ============================================================================
+model_info:
+  name: "SVM"
+  type: "Traditional Machine Learning"
+  architecture: "Support Vector Machine with TF-IDF features"
+  language: "Vietnamese"
+  description: "SVM classifier sử dụng TF-IDF features cho phân loại văn bản pháp lý"
+  
+# ============================================================================
+# CẤU HÌNH FEATURE EXTRACTION
+# ============================================================================
+feature_extraction:
+  # TF-IDF Vectorization
+  tfidf:
+    max_features: 10000
+    min_df: 2
+    max_df: 0.95
+    ngram_range: [1, 3]  # unigrams, bigrams, trigrams
+    stop_words: null  # Không sử dụng stop words cho văn bản pháp lý
+    
+  # Text preprocessing
+  preprocessing:
+    lowercase: false  # Giữ nguyên chữ hoa cho văn bản pháp lý
+    remove_punctuation: false
+    remove_numbers: false
+    normalize_unicode: true
+    remove_tone_marks: false
+    
+  # Feature selection
+  feature_selection:
+    enable: true
+    method: "chi2"  # chi2, f_classif, mutual_info_classif
+    k_best: 5000
+    threshold: 0.01
+    
+# ============================================================================
+# CẤU HÌNH SVM
+# ============================================================================
+svm:
+  # Kernel options
+  kernel: "rbf"  # linear, rbf, poly, sigmoid
+  
+  # RBF kernel parameters
+  rbf:
+    gamma: "scale"  # scale, auto, float
+    C: 1.0
+    
+  # Linear kernel parameters
+  linear:
+    C: 1.0
+    dual: true
+    
+  # Polynomial kernel parameters
+  poly:
+    degree: 3
+    gamma: "scale"
+    coef0: 0.0
+    
+  # Sigmoid kernel parameters
+  sigmoid:
+    gamma: "scale"
+    coef0: 0.0
+    
+  # General parameters
+  general:
+    probability: true
+    class_weight: "balanced"
+    random_state: 42
+    max_iter: 2000
+    cache_size: 200
+    
+# ============================================================================
+# CẤU HÌNH CLASSIFIER HEADS
+# ============================================================================
+classifier:
+  # Level 1: Loại văn bản cơ bản
+  level1:
+    name: "Document Type SVM Classifier"
+    num_classes: 10
+    one_vs_rest: true
+    calibration: true
+    calibration_method: "isotonic"  # isotonic, sigmoid
+    
+  # Level 2: Domain pháp lý
+  level2:
+    name: "Legal Domain SVM Classifier"
+    num_classes: 15
+    one_vs_rest: true
+    calibration: true
+    calibration_method: "isotonic"
+    
+# ============================================================================
+# CẤU HÌNH TRAINING
+# ============================================================================
+training:
+  # Hyperparameter tuning
+  hyperparameter_tuning:
+    enable: true
+    method: "grid_search"  # grid_search, random_search, bayesian_optimization
+    
+    # Grid search parameters
+    grid_search:
+      param_grid:
+        C: [0.1, 1, 10, 100]
+        gamma: [0.001, 0.01, 0.1, 1]
+        kernel: ["rbf", "linear"]
+      cv: 5
+      scoring: "f1_weighted"
+      n_jobs: -1
+      
+    # Random search parameters
+    random_search:
+      n_iter: 100
+      cv: 5
+      scoring: "f1_weighted"
+      n_jobs: -1
+      
+  # Cross-validation
+  cross_validation:
+    enable: true
+    cv: 5
+    stratified: true
+    shuffle: true
+    random_state: 42
+    
+  # Model persistence
+  model_persistence:
+    save_format: "pickle"  # pickle, joblib
+    compression: "gzip"
+    save_metadata: true
+    
+# ============================================================================
+# CẤU HÌNH EVALUATION
+# ============================================================================
+evaluation:
+  # Metrics
+  metrics: ["accuracy", "precision", "recall", "f1", "confusion_matrix"]
+  
+  # Classification report
+  classification_report:
+    enable: true
+    output_dict: true
+    zero_division: 0
+    
+  # Confusion matrix
+  confusion_matrix:
+    enable: true
+    normalize: "true"  # true, pred, all, None
+    
+  # ROC and PR curves
+  curves:
+    roc_curve: true
+    pr_curve: true
+    average_precision: true
+    
+# ============================================================================
+# CẤU HÌNH INFERENCE
+# ============================================================================
+inference:
+  # Prediction
+  prediction:
+    return_proba: true
+    return_decision_function: true
+    
+  # Post-processing
+  post_processing:
+    confidence_threshold: 0.7
+    top_k_predictions: 3
+    
+  # Batch processing
+  batch_processing:
+    batch_size: 1000
+    memory_efficient: true
+    
+# ============================================================================
+# CẤU HÌNH OPTIMIZATION
+# ============================================================================
+optimization:
+  # Memory optimization
+  memory:
+    sparse_features: true
+    chunk_size: 1000
+    
+  # Speed optimization
+  speed:
+    parallel_processing: true
+    n_jobs: -1
+    precompute: true
+    
+  # Model compression
+  compression:
+    enable: false
+    method: "quantization"  # quantization, pruning
+    target_size: "50%"
+    
+# ============================================================================
+# CẤU HÌNH MONITORING
+# ============================================================================
+monitoring:
+  # Training monitoring
+  training_monitoring:
+    enable: true
+    log_metrics: true
+    early_stopping: false
+    
+  # Model performance
+  performance_monitoring:
+    enable: true
+    track_drift: true
+    alert_threshold: 0.1
+    
+# ============================================================================
+# CẤU HÌNH DEPLOYMENT
+# ============================================================================
+deployment:
+  # Model serving
+  serving:
+    framework: "flask"  # flask, fastapi, django
+    batch_size: 100
+    timeout: 30
+    
+  # API endpoints
+  api:
+    predict_endpoint: "/predict"
+    predict_proba_endpoint: "/predict_proba"
+    health_check_endpoint: "/health"
+    
+  # Model versioning
+  versioning:
+    enable: true
+    version_format: "semantic"  # semantic, timestamp, hash
+    auto_version: true 

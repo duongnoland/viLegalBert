@@ -1,0 +1,190 @@
+# 📊 Cấu hình xử lý dữ liệu cho viLegalBert
+# Phân loại văn bản pháp luật Việt Nam
+
+# ============================================================================
+# CẤU HÌNH DỮ LIỆU GỐC
+# ============================================================================
+raw_data:
+  # File dữ liệu gốc
+  source_file: "data/raw/vbpl_crawl.json"
+  file_format: "json"
+  encoding: "utf-8"
+  
+  # Cấu trúc dữ liệu
+  structure:
+    id_field: "id"
+    type_field: "type"
+    name_field: "name"
+    ministry_field: "ministry"
+    chapter_field: "chapter_name"
+    article_field: "article"
+    content_field: "content"
+    
+  # Thống kê dữ liệu
+  statistics:
+    total_items: 515188
+    target_sample_size: 10000
+    min_content_length: 50
+    max_content_length: 2048
+    
+# ============================================================================
+# CẤU HÌNH TIỀN XỬ LÝ VĂN BẢN
+# ============================================================================
+text_preprocessing:
+  # Làm sạch văn bản
+  cleaning:
+    remove_html_tags: true
+    remove_urls: true
+    remove_emails: true
+    remove_phone_numbers: true
+    normalize_whitespace: true
+    remove_extra_spaces: true
+    
+  # Xử lý tiếng Việt
+  vietnamese:
+    normalize_unicode: true
+    remove_tone_marks: false
+    normalize_diacritics: true
+    preserve_vietnamese_chars: true
+    
+  # Tokenization
+  tokenization:
+    method: "word_level"  # word_level, character_level, subword
+    max_tokens: 512
+    padding: "post"
+    truncation: "post"
+    
+  # Stop words
+  stopwords:
+    use_stopwords: false
+    custom_stopwords: []
+    legal_domain_stopwords: false
+    
+# ============================================================================
+# CẤU HÌNH PHÂN LOẠI NHÃN
+# ============================================================================
+label_configuration:
+  # Tầng 1: Loại văn bản cơ bản
+  level1_labels:
+    mapping:
+      "LUẬT": ["luật", "bộ luật", "luật số"]
+      "NGHỊ ĐỊNH": ["nghị định", "nghị định số"]
+      "THÔNG TƯ": ["thông tư", "thông tư số"]
+      "NGHỊ QUYẾT": ["nghị quyết", "nghị quyết số"]
+      "QUYẾT ĐỊNH": ["quyết định", "quyết định số"]
+      "CHỈ THỊ": ["chỉ thị", "chỉ thị số"]
+      "PHÁP LỆNH": ["pháp lệnh", "pháp lệnh số"]
+      "NGHỊ QUYẾT LIÊN TỊCH": ["nghị quyết liên tịch"]
+      "THÔNG TƯ LIÊN TỊCH": ["thông tư liên tịch"]
+      "NGHỊ ĐỊNH LIÊN TỊCH": ["nghị định liên tịch"]
+      
+  # Tầng 2: Domain pháp lý
+  level2_labels:
+    mapping:
+      "HÌNH SỰ": ["hình sự", "tội phạm", "xử lý vi phạm", "phạt tù", "cải tạo"]
+      "DÂN SỰ": ["dân sự", "hợp đồng", "quyền sở hữu", "thừa kế", "hôn nhân"]
+      "HÀNH CHÍNH": ["hành chính", "xử phạt vi phạm", "thủ tục hành chính"]
+      "LAO ĐỘNG": ["lao động", "hợp đồng lao động", "tiền lương", "bảo hiểm"]
+      "THUẾ": ["thuế", "thuế thu nhập", "thuế giá trị gia tăng", "khai thuế"]
+      "DOANH NGHIỆP": ["doanh nghiệp", "công ty", "thành lập doanh nghiệp"]
+      "ĐẤT ĐAI": ["đất đai", "quyền sử dụng đất", "thủ tục đất đai"]
+      "XÂY DỰNG": ["xây dựng", "giấy phép xây dựng", "quy hoạch"]
+      "GIAO THÔNG": ["giao thông", "luật giao thông", "vi phạm giao thông"]
+      "Y TẾ": ["y tế", "khám chữa bệnh", "dược phẩm", "vệ sinh an toàn"]
+      "GIÁO DỤC": ["giáo dục", "đào tạo", "chương trình giáo dục"]
+      "TÀI CHÍNH": ["tài chính", "ngân hàng", "tín dụng", "tiền tệ"]
+      "MÔI TRƯỜNG": ["môi trường", "bảo vệ môi trường", "ô nhiễm"]
+      "AN NINH": ["an ninh", "quốc phòng", "bảo vệ an ninh"]
+      "KHÁC": []  # Default category
+      
+# ============================================================================
+# CẤU HÌNH FEATURE ENGINEERING
+# ============================================================================
+feature_engineering:
+  # Text features
+  text_features:
+    length_features: true
+    vocabulary_features: true
+    readability_features: true
+    legal_structure_features: true
+    
+  # Legal domain features
+  legal_features:
+    keyword_density: true
+    legal_terminology: true
+    document_structure: true
+    ministry_affiliation: true
+    
+  # Statistical features
+  statistical_features:
+    word_frequency: true
+    n_gram_features: true
+    tf_idf_features: true
+    document_similarity: true
+    
+# ============================================================================
+# CẤU HÌNH DATASET
+# ============================================================================
+dataset:
+  # Kích thước dataset
+  size:
+    target_total: 10000
+    train_ratio: 0.7
+    validation_ratio: 0.15
+    test_ratio: 0.15
+    
+  # Sampling strategy
+  sampling:
+    method: "stratified_random"  # random, stratified_random, balanced
+    ensure_balance: true
+    min_samples_per_class: 100
+    
+  # Data augmentation
+  augmentation:
+    enable: false
+    methods: ["synonym_replacement", "back_translation", "paraphrasing"]
+    augmentation_ratio: 0.2
+    
+# ============================================================================
+# CẤU HÌNH VALIDATION
+# ============================================================================
+validation:
+  # Cross-validation
+  cross_validation:
+    enable: false
+    folds: 5
+    stratified: true
+    
+  # Data quality checks
+  quality_checks:
+    check_duplicates: true
+    check_missing_values: true
+    check_label_consistency: true
+    check_text_quality: true
+    
+# ============================================================================
+# CẤU HÌNH LƯU TRỮ
+# ============================================================================
+storage:
+  # Output formats
+  output_formats: ["csv", "json", "parquet"]
+  
+  # Compression
+  compression: "gzip"
+  
+  # Metadata
+  save_metadata: true
+  metadata_format: "json"
+  
+# ============================================================================
+# CẤU HÌNH LOGGING
+# ============================================================================
+logging:
+  # Data processing logs
+  data_logs: true
+  processing_stats: true
+  error_logs: true
+  
+  # Progress tracking
+  progress_bar: true
+  verbose: true 

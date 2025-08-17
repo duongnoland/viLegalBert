@@ -1,0 +1,166 @@
+# 🚀 Cấu hình mô hình BiLSTM cho viLegalBert
+# Phân loại văn bản pháp luật Việt Nam
+
+# ============================================================================
+# THÔNG TIN MÔ HÌNH
+# ============================================================================
+model_info:
+  name: "BiLSTM"
+  type: "Recurrent Neural Network"
+  architecture: "Bidirectional LSTM with Attention"
+  language: "Vietnamese"
+  
+# ============================================================================
+# CẤU HÌNH EMBEDDINGS
+# ============================================================================
+embeddings:
+  # Pre-trained embeddings
+  use_pretrained: true
+  embedding_dim: 300
+  embedding_path: "data/embeddings/custom_embeddings/"
+  
+  # Custom embeddings
+  vocab_size: 50000
+  min_freq: 2
+  
+  # Embedding training
+  trainable: true
+  freeze_embeddings: false
+  
+# ============================================================================
+# CẤU HÌNH LSTM
+# ============================================================================
+lstm:
+  hidden_size: 256
+  num_layers: 2
+  bidirectional: true
+  dropout: 0.2
+  batch_first: true
+  
+  # LSTM variants
+  lstm_type: "LSTM"  # LSTM, GRU, RNN
+  proj_size: 0  # 0 for no projection
+  
+  # Initialization
+  weight_init: "xavier_uniform"
+  bias_init: "zeros"
+  
+# ============================================================================
+# CẤU HÌNH ATTENTION
+# ============================================================================
+attention:
+  use_attention: true
+  attention_type: "self_attention"  # self_attention, additive, multiplicative
+  
+  # Self-attention parameters
+  num_heads: 8
+  head_dim: 32
+  dropout: 0.1
+  
+  # Attention mechanism
+  attention_mechanism: "scaled_dot_product"
+  scale_factor: "sqrt(d_k)"
+  
+# ============================================================================
+# CẤU HÌNH CLASSIFIER HEAD
+# ============================================================================
+classifier:
+  # Level 1: Loại văn bản cơ bản
+  level1:
+    input_size: 512  # 2 * hidden_size (bidirectional)
+    hidden_size: 128
+    num_classes: 10
+    dropout: 0.3
+    activation: "relu"
+    
+  # Level 2: Domain pháp lý
+  level2:
+    input_size: 512  # 2 * hidden_size (bidirectional)
+    hidden_size: 128
+    num_classes: 15
+    dropout: 0.3
+    activation: "relu"
+    
+# ============================================================================
+# CẤU HÌNH TRAINING
+# ============================================================================
+training:
+  # Hyperparameters
+  batch_size: 32
+  learning_rate: 0.001
+  num_epochs: 20
+  clip_grad_norm: 1.0
+  
+  # Optimizer
+  optimizer: "Adam"
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+  eps: 1e-8
+  
+  # Scheduler
+  scheduler: "ReduceLROnPlateau"
+  patience: 5
+  factor: 0.5
+  min_lr: 1e-6
+  
+  # Loss function
+  loss_function: "CrossEntropyLoss"
+  label_smoothing: 0.1
+  
+# ============================================================================
+# CẤU HÌNH REGULARIZATION
+# ============================================================================
+regularization:
+  dropout: 0.2
+  weight_decay: 0.0001
+  batch_norm: false
+  layer_norm: true
+  
+  # Data augmentation
+  use_augmentation: true
+  augmentation_methods: ["synonym_replacement", "random_insertion", "random_swap"]
+  
+# ============================================================================
+# CẤU HÌNH EVALUATION
+# ============================================================================
+evaluation:
+  metrics: ["accuracy", "precision", "recall", "f1", "confusion_matrix"]
+  eval_batch_size: 64
+  
+# ============================================================================
+# CẤU HÌNH SAVING & LOADING
+# ============================================================================
+checkpointing:
+  save_dir: "models/saved_models/"
+  save_steps: 1000
+  save_total_limit: 5
+  load_best_model_at_end: true
+  metric_for_best_model: "f1"
+  
+# ============================================================================
+# CẤU HÌNH INFERENCE
+# ============================================================================
+inference:
+  batch_size: 1
+  use_cache: false
+  return_probs: true
+  
+# ============================================================================
+# CẤU HÌNH TEXT PREPROCESSING
+# ============================================================================
+preprocessing:
+  # Tokenization
+  tokenizer: "word_tokenize"
+  max_length: 512
+  padding: "post"
+  truncation: "post"
+  
+  # Text cleaning
+  remove_punctuation: false
+  remove_numbers: false
+  lowercase: true
+  remove_stopwords: false
+  
+  # Vietnamese specific
+  normalize_unicode: true
+  remove_tone_marks: false 

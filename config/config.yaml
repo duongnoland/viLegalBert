@@ -1,0 +1,115 @@
+# 🎯 Cấu hình chính dự án viLegalBert
+# Phân loại văn bản pháp luật Việt Nam với kiến trúc 2 tầng
+
+# ============================================================================
+# CẤU HÌNH CHUNG
+# ============================================================================
+project:
+  name: "viLegalBert"
+  version: "1.0.0"
+  description: "Mô hình phân loại văn bản pháp luật Việt Nam"
+  author: "Your Name"
+  date: "2025-08-17"
+
+# ============================================================================
+# ĐƯỜNG DẪN DỮ LIỆU
+# ============================================================================
+data:
+  raw_data_path: "data/raw/vbpl_crawl.json"
+  processed_data_path: "data/processed/"
+  embeddings_path: "data/embeddings/"
+  external_data_path: "data/external/"
+  
+  # Cấu hình dataset
+  target_size: 10000  # Số lượng samples mục tiêu
+  train_split: 0.7    # Tỷ lệ training
+  val_split: 0.15     # Tỷ lệ validation
+  test_split: 0.15    # Tỷ lệ test
+
+# ============================================================================
+# CẤU HÌNH MÔ HÌNH
+# ============================================================================
+model:
+  # PhoBERT
+  phobert:
+    model_name: "vinai/phobert-base"
+    max_length: 512
+    dropout: 0.1
+    
+  # BiLSTM
+  bilstm:
+    hidden_size: 256
+    num_layers: 2
+    dropout: 0.2
+    bidirectional: true
+    
+  # SVM
+  svm:
+    kernel: "rbf"
+    C: 1.0
+    gamma: "scale"
+    max_features: 10000
+    ngram_range: [1, 3]
+    
+  # Hierarchical Classifier
+  hierarchical:
+    level1_classes: 10  # Số loại văn bản cơ bản
+    level2_classes: 15  # Số domain pháp lý
+    use_attention: true
+    attention_heads: 8
+
+# ============================================================================
+# CẤU HÌNH TRAINING
+# ============================================================================
+training:
+  # Hyperparameters
+  batch_size: 16
+  learning_rate: 2e-5
+  num_epochs: 10
+  warmup_steps: 100
+  
+  # Optimizer
+  optimizer: "AdamW"
+  weight_decay: 0.01
+  
+  # Scheduler
+  scheduler: "linear"
+  
+  # Early stopping
+  patience: 3
+  min_delta: 0.001
+  
+  # Checkpointing
+  save_steps: 500
+  eval_steps: 500
+  save_total_limit: 3
+
+# ============================================================================
+# CẤU HÌNH EVALUATION
+# ============================================================================
+evaluation:
+  metrics: ["accuracy", "precision", "recall", "f1", "confusion_matrix"]
+  eval_batch_size: 32
+  
+# ============================================================================
+# CẤU HÌNH LOGGING
+# ============================================================================
+logging:
+  level: "INFO"
+  log_dir: "logs/"
+  tensorboard: true
+  
+# ============================================================================
+# CẤU HÌNH HARDWARE
+# ============================================================================
+hardware:
+  device: "auto"  # auto, cuda, cpu
+  num_workers: 4
+  pin_memory: true
+  
+# ============================================================================
+# CẤU HÌNH REPRODUCIBILITY
+# ============================================================================
+reproducibility:
+  seed: 42
+  deterministic: true 

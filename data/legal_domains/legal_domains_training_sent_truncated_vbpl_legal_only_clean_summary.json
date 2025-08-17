@@ -1,0 +1,24 @@
+{
+  "total_samples": 3104,
+  "num_classes": 8,
+  "class_distribution": {
+    "Luật Dân sự": 922,
+    "Luật Hình sự": 589,
+    "Luật Khác": 550,
+    "Luật Thương mại": 419,
+    "Luật Hành chính": 262,
+    "Luật Lao động": 176,
+    "Luật Tài chính - Ngân hàng": 136,
+    "Luật Bất động sản": 50
+  },
+  "classes": [
+    "Luật Khác",
+    "Luật Thương mại",
+    "Luật Dân sự",
+    "Luật Hình sự",
+    "Luật Lao động",
+    "Luật Tài chính - Ngân hàng",
+    "Luật Hành chính",
+    "Luật Bất động sản"
+  ]
+}
