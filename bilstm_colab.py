@@ -1,33 +1,63 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🏋️ BiLSTM Trainer cho Google Colab (Dataset Có Sẵn)
+🏋️ BiLSTM Trainer cho Google Colab (GPU Optimized)
 Phân loại văn bản pháp luật Việt Nam với BiLSTM
 """
 
 import os
-import sys
-import json
 import pickle
-import numpy as np
 import pandas as pd
 from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
 
-# Cài đặt dependencies
-def install_deps():
+# ============================================================================
+# 🚀 GPU CONFIGURATION
+# ============================================================================
+
+def setup_gpu():
+    """Thiết lập GPU cho Colab"""
     try:
         import torch
-        print("✅ PyTorch đã sẵn sàng")
-    except:
-        os.system("pip install torch")
-        print("📦 Đã cài đặt PyTorch")
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
+            
+            print(f"✅ GPU: {gpu_name} ({gpu_memory:.1f} GB)")
+            
+            # Optimize PyTorch
+            torch.backends.cudnn.benchmark = True
+            os.environ['CUDA_LAUNCH_BLOCKING'] = '0'
+            
+            return True
+        else:
+            print("⚠️ GPU không khả dụng, sử dụng CPU")
+            return False
+            
+    except ImportError:
+        print("⚠️ PyTorch chưa được cài đặt")
+        return False
+
+# ============================================================================
+# 📦 INSTALL DEPENDENCIES
+# ============================================================================
+
+def install_deps():
+    """Cài đặt dependencies cần thiết"""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            print("✅ PyTorch với CUDA đã sẵn sàng")
+        else:
+            os.system("pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118")
+    except ImportError:
+        os.system("pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118")
     
     try:
         import torchtext
         print("✅ torchtext đã sẵn sàng")
-    except:
+    except ImportError:
         os.system("pip install torchtext")
         print("📦 Đã cài đặt torchtext")
 
@@ -36,7 +66,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-from torch.nn.utils.rnn import pad_sequence
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
@@ -66,11 +95,7 @@ class TextDataset(Dataset):
         if len(features) > self.max_length:
             features = features[:self.max_length]
         else:
-            features = np.pad(
-                features, 
-                (0, self.max_length - len(features)), 
-                'constant'
-            )
+            features = np.pad(features, (0, self.max_length - len(features)), 'constant')
         
         return torch.FloatTensor(features), torch.LongTensor([label])
 
@@ -85,12 +110,8 @@ class BiLSTMClassifier(nn.Module):
         
         # BiLSTM layer
         self.lstm = nn.LSTM(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            batch_first=True,
-            bidirectional=True,
-            dropout=dropout if num_layers > 1 else 0
+            input_size=input_size, hidden_size=hidden_size, num_layers=num_layers,
+            batch_first=True, bidirectional=True, dropout=dropout if num_layers > 1 else 0
         )
         
         # Attention mechanism
@@ -110,12 +131,10 @@ class BiLSTMClassifier(nn.Module):
         )
     
     def forward(self, x):
-        # x shape: (batch_size, seq_len, input_size)
         batch_size = x.size(0)
         
         # LSTM forward pass
         lstm_out, _ = self.lstm(x)
-        # lstm_out shape: (batch_size, seq_len, hidden_size * 2)
         
         # Attention mechanism
         attention_weights = self.attention(lstm_out)
@@ -123,36 +142,57 @@ class BiLSTMClassifier(nn.Module):
         
         # Apply attention
         attended_output = torch.sum(attention_weights * lstm_out, dim=1)
-        # attended_output shape: (batch_size, hidden_size * 2)
         
         # Classification
         output = self.classifier(attended_output)
         return output
 
 class BiLSTMTrainer:
-    """Trainer cho mô hình BiLSTM"""
+    """Trainer cho mô hình BiLSTM với GPU optimization"""
     
     def __init__(self):
-        """Khởi tạo trainer"""
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # Kiểm tra GPU
+        self.use_gpu = setup_gpu()
+        self.device = torch.device("cuda" if self.use_gpu else "cpu")
         print(f"🚀 Sử dụng device: {self.device}")
         
-        # Cấu hình training
-        self.config = {
-            'max_features': 5000,
-            'max_length': 1000,
-            'hidden_size': 128,
-            'num_layers': 2,
-            'dropout': 0.5,
-            'learning_rate': 0.001,
-            'num_epochs': 10,
-            'batch_size': 32,
-            'early_stopping_patience': 5
-        }
+        # Cấu hình training tối ưu cho GPU/CPU
+        if self.use_gpu:
+            self.config = {
+                'max_features': 8000,
+                'max_length': 1000,
+                'hidden_size': 256,
+                'num_layers': 3,
+                'dropout': 0.5,
+                'learning_rate': 0.001,
+                'num_epochs': 15,
+                'batch_size': 64,
+                'early_stopping_patience': 7,
+                'gradient_clip': 1.0,
+                'scheduler_patience': 3,
+                'scheduler_factor': 0.5
+            }
+        else:
+            self.config = {
+                'max_features': 5000,
+                'max_length': 1000,
+                'hidden_size': 128,
+                'num_layers': 2,
+                'dropout': 0.5,
+                'learning_rate': 0.001,
+                'num_epochs': 10,
+                'batch_size': 32,
+                'early_stopping_patience': 5,
+                'gradient_clip': None,
+                'scheduler_patience': 3,
+                'scheduler_factor': 0.5
+            }
         
         self.vectorizer = None
         self.label_encoder = None
         self.model = None
+        
+        print(f"🚀 BiLSTMTrainer - GPU: {'✅' if self.use_gpu else '❌'}")
     
     def prepare_data(self, texts, labels):
         """Chuẩn bị data cho training"""
@@ -161,9 +201,7 @@ class BiLSTMTrainer:
         # TF-IDF Vectorization
         self.vectorizer = TfidfVectorizer(
             max_features=self.config['max_features'],
-            min_df=2,
-            max_df=0.95,
-            ngram_range=(1, 2)
+            min_df=2, max_df=0.95, ngram_range=(1, 2)
         )
         
         # Fit vectorizer
@@ -185,14 +223,20 @@ class BiLSTMTrainer:
         print("🏗️ Tạo BiLSTM model...")
         
         self.model = BiLSTMClassifier(
-            input_size=input_size,
-            hidden_size=self.config['hidden_size'],
-            num_layers=self.config['num_layers'],
-            num_classes=num_classes,
+            input_size=input_size, hidden_size=self.config['hidden_size'],
+            num_layers=self.config['num_layers'], num_classes=num_classes,
             dropout=self.config['dropout']
         )
         
+        # Chuyển model lên device
         self.model.to(self.device)
+        
+        # GPU optimization
+        if self.use_gpu:
+            if self.config['gradient_clip']:
+                self.model = self.model.half()
+            torch.cuda.empty_cache()
+            print(f"🚀 Model đã được tối ưu cho GPU")
         
         # Model summary
         total_params = sum(p.numel() for p in self.model.parameters())
@@ -200,6 +244,7 @@ class BiLSTMTrainer:
         
         print(f"📊 Total parameters: {total_params:,}")
         print(f"📊 Trainable parameters: {trainable_params:,}")
+        print(f"🚀 Device: {self.device}")
         
         return self.model
     
@@ -213,13 +258,12 @@ class BiLSTMTrainer:
         
         # Learning rate scheduler
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode='min', factor=0.5, patience=3, verbose=True
+            optimizer, mode='min', factor=self.config['scheduler_factor'], 
+            patience=self.config['scheduler_patience'], verbose=True
         )
         
         # Training history
-        train_losses = []
-        val_losses = []
-        val_accuracies = []
+        train_losses, val_losses, val_accuracies = [], [], []
         best_val_loss = float('inf')
         patience_counter = 0
         
@@ -232,15 +276,16 @@ class BiLSTMTrainer:
                 batch_features = batch_features.to(self.device)
                 batch_labels = batch_labels.squeeze().to(self.device)
                 
-                # Forward pass
                 optimizer.zero_grad()
                 outputs = self.model(batch_features)
                 loss = criterion(outputs, batch_labels)
-                
-                # Backward pass
                 loss.backward()
-                optimizer.step()
                 
+                # Gradient clipping cho GPU
+                if self.config['gradient_clip'] and self.use_gpu:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['gradient_clip'])
+                
+                optimizer.step()
                 train_loss += loss.item()
             
             # Validation phase
@@ -278,7 +323,6 @@ class BiLSTMTrainer:
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 patience_counter = 0
-                # Save best model
                 torch.save(self.model.state_dict(), 'best_bilstm_model.pth')
             else:
                 patience_counter += 1
@@ -289,6 +333,8 @@ class BiLSTMTrainer:
             print(f"  Val Loss: {avg_val_loss:.4f}")
             print(f"  Val Accuracy: {val_accuracy:.4f}")
             print(f"  Learning Rate: {optimizer.param_groups[0]['lr']:.6f}")
+            if self.use_gpu:
+                print(f"  GPU Memory: {torch.cuda.memory_allocated()/1024**3:.2f} GB")
             
             # Early stopping check
             if patience_counter >= self.config['early_stopping_patience']:
@@ -296,7 +342,9 @@ class BiLSTMTrainer:
                 break
         
         # Load best model
-        self.model.load_state_dict(torch.load('best_bilstm_model.pth'))
+        if Path('best_bilstm_model.pth').exists():
+            self.model.load_state_dict(torch.load('best_bilstm_model.pth', map_location=self.device))
+            print(f"✅ Loaded best model")
         
         return {
             'train_losses': train_losses,
@@ -304,9 +352,9 @@ class BiLSTMTrainer:
             'val_accuracies': val_accuracies
         }
     
-    def train_level1(self, data_path: str):
-        """Training cho Level 1 (Loại văn bản)"""
-        print("🏷️ Training Level 1 (Loại văn bản) với BiLSTM...")
+    def train_level1(self, data_path):
+        """Training cho Level 1"""
+        print("🏷️ Training Level 1...")
         
         # Load data
         df = pd.read_csv(data_path, encoding='utf-8')
@@ -327,29 +375,23 @@ class BiLSTMTrainer:
         # Create datasets
         train_dataset = TextDataset(
             [texts[i] for i in np.where(X_train.toarray().sum(axis=1) > 0)[0]],
-            y_train,
-            self.vectorizer,
-            self.config['max_length']
+            y_train, self.vectorizer, self.config['max_length']
         )
         
         val_dataset = TextDataset(
             [texts[i] for i in np.where(X_val.toarray().sum(axis=1) > 0)[0]],
-            y_val,
-            self.vectorizer,
-            self.config['max_length']
+            y_val, self.vectorizer, self.config['max_length']
         )
         
         # Create dataloaders
         train_loader = DataLoader(
-            train_dataset, 
-            batch_size=self.config['batch_size'], 
-            shuffle=True
+            train_dataset, batch_size=self.config['batch_size'], shuffle=True,
+            pin_memory=True if self.use_gpu else False, num_workers=4 if self.use_gpu else 2
         )
         
         val_loader = DataLoader(
-            val_dataset, 
-            batch_size=self.config['batch_size'], 
-            shuffle=False
+            val_dataset, batch_size=self.config['batch_size'], shuffle=False,
+            pin_memory=True if self.use_gpu else False, num_workers=4 if self.use_gpu else 2
         )
         
         # Training
@@ -363,23 +405,24 @@ class BiLSTMTrainer:
             'model_state_dict': self.model.state_dict(),
             'vectorizer': self.vectorizer,
             'label_encoder': self.label_encoder,
-            'config': self.config
+            'config': self.config,
+            'gpu_optimized': self.use_gpu
         }
         
         with open(model_path, 'wb') as f:
             pickle.dump(model_data, f)
         
-        print(f"💾 Model đã được lưu: {model_path}")
-        
+        print(f"💾 Model đã lưu: {model_path}")
         return {
             'model_path': model_path,
             'history': history,
-            'num_classes': num_classes
+            'num_classes': num_classes,
+            'gpu_optimized': self.use_gpu
         }
     
-    def train_level2(self, data_path: str):
-        """Training cho Level 2 (Domain pháp lý)"""
-        print("🏷️ Training Level 2 (Domain pháp lý) với BiLSTM...")
+    def train_level2(self, data_path):
+        """Training cho Level 2"""
+        print("🏷️ Training Level 2...")
         
         # Load data
         df = pd.read_csv(data_path, encoding='utf-8')
@@ -400,29 +443,23 @@ class BiLSTMTrainer:
         # Create datasets
         train_dataset = TextDataset(
             [texts[i] for i in np.where(X_train.toarray().sum(axis=1) > 0)[0]],
-            y_train,
-            self.vectorizer,
-            self.config['max_length']
+            y_train, self.vectorizer, self.config['max_length']
         )
         
         val_dataset = TextDataset(
             [texts[i] for i in np.where(X_val.toarray().sum(axis=1) > 0)[0]],
-            y_val,
-            self.vectorizer,
-            self.config['max_length']
+            y_val, self.vectorizer, self.config['max_length']
         )
         
         # Create dataloaders
         train_loader = DataLoader(
-            train_dataset, 
-            batch_size=self.config['batch_size'], 
-            shuffle=True
+            train_dataset, batch_size=self.config['batch_size'], shuffle=True,
+            pin_memory=True if self.use_gpu else False, num_workers=4 if self.use_gpu else 2
         )
         
         val_loader = DataLoader(
-            val_dataset, 
-            batch_size=self.config['batch_size'], 
-            shuffle=False
+            val_dataset, batch_size=self.config['batch_size'], shuffle=False,
+            pin_memory=True if self.use_gpu else False, num_workers=4 if self.use_gpu else 2
         )
         
         # Training
@@ -436,70 +473,64 @@ class BiLSTMTrainer:
             'model_state_dict': self.model.state_dict(),
             'vectorizer': self.vectorizer,
             'label_encoder': self.label_encoder,
-            'config': self.config
+            'config': self.config,
+            'gpu_optimized': self.use_gpu
         }
         
         with open(model_path, 'wb') as f:
             pickle.dump(model_data, f)
         
-        print(f"💾 Model đã được lưu: {model_path}")
-        
+        print(f"💾 Model đã lưu: {model_path}")
         return {
             'model_path': model_path,
             'history': history,
-            'num_classes': num_classes
+            'num_classes': num_classes,
+            'gpu_optimized': self.use_gpu
         }
 
 def main():
     """Hàm chính"""
-    print("🏋️ BILSTM TRAINER CHO GOOGLE COLAB!")
-    print("📊 SỬ DỤNG DATASET CÓ SẴN")
+    print("🏋️ BILSTM TRAINER - GPU OPTIMIZED")
     print("=" * 50)
     
-    # Cài đặt dependencies
+    # Bước 1: GPU setup
+    print("\n🚀 BƯỚC 1: GPU SETUP")
+    gpu_available = setup_gpu()
+    
+    # Bước 2: Cài đặt dependencies
+    print("\n📦 BƯỚC 2: CÀI ĐẶT DEPENDENCIES")
     install_deps()
     
-    # Tạo cấu trúc thư mục
-    from pathlib import Path
+    # Bước 3: Tạo thư mục
+    print("\n🏗️ BƯỚC 3: TẠO THƯ MỤC")
     Path("models/saved_models/level1_classifier/bilstm_level1").mkdir(parents=True, exist_ok=True)
     Path("models/saved_models/level2_classifier/bilstm_level2").mkdir(parents=True, exist_ok=True)
     
-    # Kiểm tra dataset có sẵn
+    # Bước 4: Kiểm tra dataset
+    print("\n📊 BƯỚC 4: KIỂM TRA DATASET")
     dataset_path = "data/processed/hierarchical_legal_dataset.csv"
     if not Path(dataset_path).exists():
         print(f"❌ Không tìm thấy dataset: {dataset_path}")
-        print("🔍 Tìm kiếm dataset trong các thư mục...")
-        
-        possible_paths = [
-            "hierarchical_legal_dataset.csv",
-            "data/hierarchical_legal_dataset.csv",
-            "dataset.csv",
-            "legal_dataset.csv"
-        ]
-        
-        for path in possible_paths:
-            if Path(path).exists():
-                dataset_path = path
-                print(f"✅ Tìm thấy dataset: {dataset_path}")
-                break
-        else:
-            print("❌ Không tìm thấy dataset nào. Vui lòng upload dataset vào Colab")
-            return
+        return
     
-    # Khởi tạo trainer
+    # Bước 5: Khởi tạo trainer
+    print("\n🏋️ BƯỚC 5: KHỞI TẠO TRAINER")
     trainer = BiLSTMTrainer()
     
-    # Training Level 1
+    # Bước 6: Training Level 1
     print("\n🏷️ TRAINING LEVEL 1...")
     results_level1 = trainer.train_level1(dataset_path)
     
-    # Training Level 2
+    # Bước 7: Training Level 2
     print("\n🏷️ TRAINING LEVEL 2...")
     results_level2 = trainer.train_level2(dataset_path)
     
+    # Tóm tắt kết quả
     print("\n🎉 BILSTM TRAINING HOÀN THÀNH!")
+    print("=" * 80)
     print(f"📊 Level 1 model: {results_level1['model_path']}")
     print(f"📊 Level 2 model: {results_level2['model_path']}")
+    print(f"🚀 GPU Status: {'✅ Available' if gpu_available else '❌ Not Available'}")
 
 if __name__ == "__main__":
     main() 
