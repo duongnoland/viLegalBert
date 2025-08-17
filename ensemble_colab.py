@@ -15,30 +15,51 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
 
-# Cài đặt dependencies
-def install_deps():
-    try:
-        import sklearn
-        print("✅ scikit-learn đã sẵn sàng")
-    except:
-        os.system("pip install scikit-learn")
-        print("📦 Đã cài đặt scikit-learn")
-    
-    try:
-        import torch
-        print("✅ PyTorch đã sẵn sàng")
-    except:
-        os.system("pip install torch")
-        print("📦 Đã cài đặt PyTorch")
-    
-    try:
-        import transformers
-        print("✅ transformers đã sẵn sàng")
-    except:
-        os.system("pip install transformers")
-        print("📦 Đã cài đặt transformers")
+# ============================================================================
+# 🚀 GPU SETUP & DEPENDENCIES
+# ============================================================================
 
-# Import sau khi cài đặt
+def setup_gpu():
+    """Setup GPU environment"""
+    import torch
+    
+    if torch.cuda.is_available():
+        print("🚀 GPU CUDA available!")
+        print(f"📊 GPU Device: {torch.cuda.get_device_name(0)}")
+        print(f"📊 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+        
+        # Set default device
+        torch.cuda.set_device(0)
+        return True
+    else:
+        print("⚠️ GPU CUDA không available, sử dụng CPU")
+        return False
+
+def install_deps():
+    """Cài đặt dependencies"""
+    import subprocess
+    import sys
+    
+    packages = [
+        "scikit-learn",
+        "pandas",
+        "numpy",
+        "joblib"
+    ]
+    
+    for package in packages:
+        try:
+            __import__(package.replace("-", "_"))
+            print(f"✅ {package} đã có sẵn")
+        except ImportError:
+            print(f"📦 Cài đặt {package}...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+            print(f"✅ {package} đã cài đặt xong")
+
+# ============================================================================
+# 🏋️ ENSEMBLE TRAINER
+# ============================================================================
+
 from sklearn.ensemble import VotingClassifier
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import train_test_split
@@ -381,36 +402,61 @@ class EnsembleTrainer:
 
 def main():
     """Hàm chính"""
-    print("🏋️ ENSEMBLE TRAINER CHO GOOGLE COLAB!")
+    print("🏋️ ENSEMBLE TRAINER - GPU OPTIMIZED")
     print("=" * 50)
     
-    # Cài đặt dependencies
+    # Bước 1: GPU setup
+    print("\n🚀 BƯỚC 1: GPU SETUP")
+    gpu_available = setup_gpu()
+    
+    # Bước 2: Cài đặt dependencies
+    print("\n📦 BƯỚC 2: CÀI ĐẶT DEPENDENCIES")
     install_deps()
     
-    # Tạo cấu trúc thư mục
-    from pathlib import Path
+    # Bước 3: Tạo thư mục
+    print("\n🏗️ BƯỚC 3: TẠO THƯ MỤC")
     Path("models/saved_models/hierarchical_models").mkdir(parents=True, exist_ok=True)
     
-    # Khởi tạo trainer
-    trainer = EnsembleTrainer()
+    # Bước 4: Kiểm tra splits
+    print("\n🔄 BƯỚC 4: KIỂM TRA SPLITS")
+    splits_dir = "data/processed/dataset_splits"
+    train_path = Path(splits_dir) / "train.csv"
+    val_path = Path(splits_dir) / "validation.csv"
+    test_path = Path(splits_dir) / "test.csv"
     
-    # Load các models
-    print("\n📥 LOADING MODELS...")
-    svm_loaded = trainer.load_svm_models()
-    phobert_loaded = trainer.load_phobert_models()
-    bilstm_loaded = trainer.load_bilstm_models()
-    
-    if not any([svm_loaded, phobert_loaded, bilstm_loaded]):
-        print("❌ Không có model nào được load thành công")
+    if not (train_path.exists() and val_path.exists() and test_path.exists()):
+        print("❌ Dataset splits chưa có, vui lòng chạy main pipeline trước")
         return
     
-    # Evaluation ensemble
-    print("\n📊 EVALUATION ENSEMBLE...")
-    results = trainer.evaluate_ensemble("data/processed/dataset_splits/test.csv")
+    # Load và hiển thị thông tin splits
+    train_df = pd.read_csv(train_path, encoding='utf-8')
+    val_df = pd.read_csv(val_path, encoding='utf-8')
+    test_df = pd.read_csv(test_path, encoding='utf-8')
     
-    print("\n🎉 ENSEMBLE EVALUATION HOÀN THÀNH!")
-    if results['ensemble_path']:
-        print(f"📊 Ensemble model: {results['ensemble_path']}")
+    print(f"✅ Dataset splits đã có sẵn:")
+    print(f"📊 Train set: {len(train_df)} samples")
+    print(f"📊 Validation set: {len(val_df)} samples")
+    print(f"📊 Test set: {len(test_df)} samples")
+    
+    # Bước 5: Khởi tạo trainer
+    print("\n🏋️ BƯỚC 5: KHỞI TẠO TRAINER")
+    trainer = EnsembleTrainer()
+    
+    # Bước 6: Tạo ensemble
+    print("\n🔄 TẠO ENSEMBLE...")
+    ensemble_results = trainer.create_ensemble()
+    
+    # Bước 7: Đánh giá ensemble
+    print("\n📊 ĐÁNH GIÁ ENSEMBLE...")
+    evaluation_results = trainer.evaluate_ensemble("data/processed/dataset_splits/test.csv")
+    
+    # Tóm tắt kết quả
+    print("\n🎉 ENSEMBLE TRAINING HOÀN THÀNH!")
+    print("=" * 80)
+    print(f"📊 Ensemble model: {ensemble_results['ensemble_path']}")
+    print(f"📊 Level 1 Accuracy: {evaluation_results['level1_accuracy']:.4f}")
+    print(f"📊 Level 2 Accuracy: {evaluation_results['level2_accuracy']:.4f}")
+    print(f"🚀 GPU Status: {'✅ Available' if gpu_available else '❌ Not Available'}")
 
 if __name__ == "__main__":
     main() 

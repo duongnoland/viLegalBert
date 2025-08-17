@@ -158,29 +158,6 @@ class CompletePipeline:
             print("⚠️ Dataset splits chưa có, sẽ tạo mới...")
             return False
     
-    def create_splits(self, dataset_path):
-        """Tạo training splits"""
-        splits_dir = "data/processed/dataset_splits"
-        Path(splits_dir).mkdir(parents=True, exist_ok=True)
-        
-        # Load dataset
-        df = pd.read_csv(dataset_path, encoding='utf-8')
-        
-        # Chia dữ liệu
-        from sklearn.model_selection import train_test_split
-        train_df, temp_df = train_test_split(df, test_size=0.3, random_state=42, stratify=df['type_level1'])
-        val_df, test_df = train_test_split(temp_df, test_size=0.5, random_state=42, stratify=temp_df['type_level1'])
-        
-        # Lưu splits
-        train_df.to_csv(f"{splits_dir}/train.csv", index=False, encoding='utf-8')
-        val_df.to_csv(f"{splits_dir}/validation.csv", index=False, encoding='utf-8')
-        test_df.to_csv(f"{splits_dir}/test.csv", index=False, encoding='utf-8')
-        
-        print(f"✅ Đã tạo splits mới:")
-        print(f"📊 Train set: {len(train_df)} samples")
-        print(f"📊 Validation set: {len(val_df)} samples")
-        print(f"📊 Test set: {len(test_df)} samples")
-    
     def train_svm(self, dataset_path):
         """Training SVM models"""
         print("🏋️ Training SVM models...")
@@ -417,22 +394,17 @@ class CompletePipeline:
         print("\n🏗️ BƯỚC 3: TẠO THƯ MỤC")
         self.create_dirs()
         
-        # Bước 4: Kiểm tra dataset
-        print("\n📊 BƯỚC 4: KIỂM TRA DATASET")
-        dataset_path = self.check_dataset()
-        if dataset_path is None:
-            print("❌ Pipeline dừng do không tìm thấy dataset")
+        # Bước 4: Kiểm tra splits
+        print("\n🔄 BƯỚC 4: KIỂM TRA SPLITS")
+        if not self.check_splits():
+            print("❌ Pipeline dừng do không có dataset splits")
             return False
         
-        # Bước 5: Kiểm tra splits
-        print("\n🔄 BƯỚC 5: KIỂM TRA SPLITS")
-        if not self.check_splits():
-            print("\n🔄 BƯỚC 6: TẠO SPLITS")
-            self.create_splits(dataset_path)
-        
-        # Bước 6: Training các models
-        print("\n🏋️ BƯỚC 6: TRAINING MODELS")
+        # Bước 5: Training các models
+        print("\n🏋️ BƯỚC 5: TRAINING MODELS")
         training_success = True
+        
+        dataset_path = "data/processed/hierarchical_legal_dataset.csv"
         
         if 'svm' in self.config['train_models']:
             if not self.train_svm(dataset_path):
@@ -449,15 +421,15 @@ class CompletePipeline:
         if not training_success:
             print("⚠️ Một số models training thất bại")
         
-        # Bước 7: Tạo ensemble
+        # Bước 6: Tạo ensemble
         if self.config['create_ensemble'] and training_success:
             self.create_ensemble()
         
-        # Bước 8: Đánh giá tất cả
+        # Bước 7: Đánh giá tất cả
         if self.config['evaluate_all']:
             self.evaluate_all()
         
-        # Bước 9: Tạo báo cáo
+        # Bước 8: Tạo báo cáo
         self.generate_report()
         
         print("\n🎉 COMPLETE PIPELINE HOÀN THÀNH!")

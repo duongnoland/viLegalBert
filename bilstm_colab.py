@@ -506,43 +506,37 @@ def main():
     Path("models/saved_models/level1_classifier/bilstm_level1").mkdir(parents=True, exist_ok=True)
     Path("models/saved_models/level2_classifier/bilstm_level2").mkdir(parents=True, exist_ok=True)
     
-    # Bước 4: Kiểm tra dataset
-    print("\n📊 BƯỚC 4: KIỂM TRA DATASET")
-    dataset_path = "data/processed/hierarchical_legal_dataset.csv"
-    if not Path(dataset_path).exists():
-        print(f"❌ Không tìm thấy dataset: {dataset_path}")
-        return
-    
-    # Bước 5: Kiểm tra splits
-    print("\n🔄 BƯỚC 5: KIỂM TRA SPLITS")
+    # Bước 4: Kiểm tra splits
+    print("\n🔄 BƯỚC 4: KIỂM TRA SPLITS")
     splits_dir = "data/processed/dataset_splits"
     train_path = Path(splits_dir) / "train.csv"
     val_path = Path(splits_dir) / "validation.csv"
     test_path = Path(splits_dir) / "test.csv"
     
-    if train_path.exists() and val_path.exists() and test_path.exists():
-        # Load và hiển thị thông tin splits
-        train_df = pd.read_csv(train_path, encoding='utf-8')
-        val_df = pd.read_csv(val_path, encoding='utf-8')
-        test_df = pd.read_csv(test_path, encoding='utf-8')
-        
-        print(f"✅ Dataset splits đã có sẵn:")
-        print(f"📊 Train set: {len(train_df)} samples")
-        print(f"📊 Validation set: {len(val_df)} samples")
-        print(f"📊 Test set: {len(test_df)} samples")
-    else:
-        print("⚠️ Dataset splits chưa có, vui lòng chạy main pipeline trước")
+    if not (train_path.exists() and val_path.exists() and test_path.exists()):
+        print("❌ Dataset splits chưa có, vui lòng chạy main pipeline trước")
         return
     
-    # Bước 6: Khởi tạo trainer
-    print("\n🏋️ BƯỚC 6: KHỞI TẠO TRAINER")
+    # Load và hiển thị thông tin splits
+    train_df = pd.read_csv(train_path, encoding='utf-8')
+    val_df = pd.read_csv(val_path, encoding='utf-8')
+    test_df = pd.read_csv(test_path, encoding='utf-8')
+    
+    print(f"✅ Dataset splits đã có sẵn:")
+    print(f"📊 Train set: {len(train_df)} samples")
+    print(f"📊 Validation set: {len(val_df)} samples")
+    print(f"📊 Test set: {len(test_df)} samples")
+    
+    # Bước 5: Khởi tạo trainer
+    print("\n🏋️ BƯỚC 5: KHỞI TẠO TRAINER")
     trainer = BiLSTMTrainer()
     
-    # Bước 7: Training Level 1
+    # Bước 6: Training Level 1
     print("\n🏷️ TRAINING LEVEL 1...")
+    dataset_path = "data/processed/hierarchical_legal_dataset.csv"
     results_level1 = trainer.train_level1(dataset_path)
     
-    # Bước 8: Training Level 2
+    # Bước 7: Training Level 2
     print("\n🏷️ TRAINING LEVEL 2...")
     results_level2 = trainer.train_level2(dataset_path)
     

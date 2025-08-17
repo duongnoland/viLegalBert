@@ -91,29 +91,6 @@ def create_dirs():
 # 📊 DATASET LOADING
 # ============================================================================
 
-def load_dataset():
-    """Load dataset từ data/processed"""
-    dataset_path = "data/processed/hierarchical_legal_dataset.csv"
-    
-    if not Path(dataset_path).exists():
-        print(f"❌ Không tìm thấy dataset: {dataset_path}")
-        return None
-    
-    df = pd.read_csv(dataset_path, encoding='utf-8')
-    print(f"✅ Đã load dataset: {len(df)} samples")
-    
-    # Kiểm tra columns cần thiết
-    required_cols = ['text', 'type_level1', 'domain_level2']
-    if not all(col in df.columns for col in required_cols):
-        print(f"❌ Thiếu columns: {required_cols}")
-        return None
-    
-    # Hiển thị thống kê
-    print(f"🏷️ Level 1: {df['type_level1'].value_counts().to_dict()}")
-    print(f"🏷️ Level 2: {df['domain_level2'].value_counts().to_dict()}")
-    
-    return df
-
 def check_splits():
     """Kiểm tra dataset splits có sẵn"""
     splits_dir = "data/processed/dataset_splits"
@@ -135,25 +112,6 @@ def check_splits():
     else:
         print("⚠️ Dataset splits chưa có, sẽ tạo mới...")
         return False
-
-def create_splits(df):
-    """Tạo training splits"""
-    splits_dir = "data/processed/dataset_splits"
-    Path(splits_dir).mkdir(parents=True, exist_ok=True)
-    
-    # Chia dữ liệu
-    train_df, temp_df = train_test_split(df, test_size=0.3, random_state=42, stratify=df['type_level1'])
-    val_df, test_df = train_test_split(temp_df, test_size=0.5, random_state=42, stratify=temp_df['type_level1'])
-    
-    # Lưu splits
-    train_df.to_csv(f"{splits_dir}/train.csv", index=False, encoding='utf-8')
-    val_df.to_csv(f"{splits_dir}/validation.csv", index=False, encoding='utf-8')
-    test_df.to_csv(f"{splits_dir}/test.csv", index=False, encoding='utf-8')
-    
-    print(f"✅ Đã tạo splits mới:")
-    print(f"📊 Train set: {len(train_df)} samples")
-    print(f"📊 Validation set: {len(val_df)} samples")
-    print(f"📊 Test set: {len(test_df)} samples")
 
 # ============================================================================
 # 🏋️ SVM TRAINER
@@ -383,32 +341,27 @@ def main():
     print("\n🏗️ BƯỚC 3: TẠO THƯ MỤC")
     create_dirs()
     
-    # Bước 4: Load dataset
-    print("\n📊 BƯỚC 4: LOAD DATASET")
-    df = load_dataset()
-    if df is None:
+    # Bước 4: Kiểm tra splits
+    print("\n🔄 BƯỚC 4: KIỂM TRA SPLITS")
+    if not check_splits():
+        print("❌ Pipeline dừng do không có dataset splits")
         return
     
-    # Bước 5: Kiểm tra splits
-    print("\n🔄 BƯỚC 5: KIỂM TRA SPLITS")
-    if not check_splits():
-        print("\n🔄 BƯỚC 6: TẠO SPLITS")
-        create_splits(df)
-    
-    # Bước 6: Training SVM
-    print("\n🏋️ BƯỚC 6: TRAINING SVM")
+    # Bước 5: Training SVM
+    print("\n🏋️ BƯỚC 5: TRAINING SVM")
     trainer = SVMTrainer()
     
-    results_level1 = trainer.train_level1("data/processed/hierarchical_legal_dataset.csv")
-    results_level2 = trainer.train_level2("data/processed/hierarchical_legal_dataset.csv")
+    dataset_path = "data/processed/hierarchical_legal_dataset.csv"
+    results_level1 = trainer.train_level1(dataset_path)
+    results_level2 = trainer.train_level2(dataset_path)
     
-    # Bước 7: Evaluation
-    print("\n📊 BƯỚC 7: EVALUATION")
+    # Bước 6: Evaluation
+    print("\n📊 BƯỚC 6: EVALUATION")
     evaluate_models("data/processed/dataset_splits/test.csv")
     
     # Tóm tắt
     print("\n🎉 PIPELINE HOÀN THÀNH!")
-    print(f"📊 Dataset: {len(df)} samples")
+    print(f"📊 Dataset: {dataset_path}")
     print(f"🏷️ Level 1 Accuracy: {results_level1['accuracy']:.4f}")
     print(f"🏷️ Level 2 Accuracy: {results_level2['accuracy']:.4f}")
     print(f"🚀 GPU Status: {'✅ Available' if gpu_available else '❌ Not Available'}")
