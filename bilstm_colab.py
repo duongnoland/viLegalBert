@@ -488,6 +488,9 @@ def main():
     print("🏋️ BILSTM TRAINER - GPU OPTIMIZED")
     print("=" * 50)
     
+    # Base directory cho Google Colab
+    base_dir = "/content/viLegalBert"
+    
     # Bước 1: GPU setup
     print("\n🚀 BƯỚC 1: GPU SETUP")
     gpu_available = setup_gpu()
@@ -499,12 +502,12 @@ def main():
     # Bước 3: Tạo thư mục
     print("\n🏗️ BƯỚC 3: TẠO THƯ MỤC")
     import os
-    os.makedirs("models/saved_models/level1_classifier/bilstm_level1", exist_ok=True)
-    os.makedirs("models/saved_models/level2_classifier/bilstm_level2", exist_ok=True)
+    os.makedirs(f"{base_dir}/models/saved_models/level1_classifier/bilstm_level1", exist_ok=True)
+    os.makedirs(f"{base_dir}/models/saved_models/level2_classifier/bilstm_level2", exist_ok=True)
     
     # Bước 4: Kiểm tra splits
     print("\n🔄 BƯỚC 4: KIỂM TRA SPLITS")
-    splits_dir = "data/processed/dataset_splits"
+    splits_dir = f"{base_dir}/data/processed/dataset_splits"
     train_path = os.path.join(splits_dir, "train.csv")
     val_path = os.path.join(splits_dir, "validation.csv")
     test_path = os.path.join(splits_dir, "test.csv")
@@ -530,7 +533,7 @@ def main():
     
     # Bước 6: Training Level 1
     print("\n🏷️ TRAINING LEVEL 1...")
-    dataset_path = "data/processed/hierarchical_legal_dataset.csv"
+    dataset_path = f"{base_dir}/data/processed/hierarchical_legal_dataset.csv"
     results_level1 = trainer.train_level1(dataset_path)
     
     # Bước 7: Training Level 2

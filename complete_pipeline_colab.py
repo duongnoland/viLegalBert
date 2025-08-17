@@ -89,40 +89,52 @@ class CompletePipeline:
         print(f"🚀 CompletePipeline - GPU: {'✅' if self.use_gpu else '❌'}")
     
     def create_dirs(self):
-        """Tạo thư mục cần thiết"""
+        """Tạo thư mục cần thiết từ /content/viLegalBert"""
+        import os
+        
+        # Base directory cho Google Colab
+        base_dir = "/content/viLegalBert"
+        
         dirs = [
-            'models/saved_models/level1_classifier/svm_level1',
-            'models/saved_models/level2_classifier/svm_level2',
-            'models/saved_models/level1_classifier/phobert_level1',
-            'models/saved_models/level2_classifier/phobert_level2',
-            'models/saved_models/level1_classifier/bilstm_level1',
-            'models/saved_models/level2_classifier/bilstm_level2',
-            'models/saved_models/hierarchical_models',
-            'results/training_results',
-            'results/evaluation_results',
-            'logs'
+            f"{base_dir}/models/saved_models/level1_classifier/svm_level1",
+            f"{base_dir}/models/saved_models/level2_classifier/svm_level2",
+            f"{base_dir}/models/saved_models/level1_classifier/phobert_level1",
+            f"{base_dir}/models/saved_models/level2_classifier/phobert_level2",
+            f"{base_dir}/models/saved_models/level1_classifier/bilstm_level1",
+            f"{base_dir}/models/saved_models/level2_classifier/bilstm_level2",
+            f"{base_dir}/models/saved_models/hierarchical_models",
+            f"{base_dir}/results/evaluation_results",
+            f"{base_dir}/logs"
         ]
         
-        for d in dirs:
-            Path(d).mkdir(parents=True, exist_ok=True)
-            print(f"✅ Tạo thư mục: {d}")
+        for dir_path in dirs:
+            os.makedirs(dir_path, exist_ok=True)
+            print(f"✅ Đã tạo thư mục: {dir_path}")
     
     def check_dataset(self):
-        """Kiểm tra dataset có sẵn"""
-        dataset_path = "data/processed/hierarchical_legal_dataset.csv"
+        """Kiểm tra dataset có sẵn từ /content/viLegalBert"""
+        import os
         
-        if not Path(dataset_path).exists():
+        # Base directory cho Google Colab
+        base_dir = "/content/viLegalBert"
+        
+        dataset_path = f"{base_dir}/data/processed/hierarchical_legal_dataset.csv"
+        
+        if not os.path.exists(dataset_path):
             print(f"❌ Không tìm thấy dataset: {dataset_path}")
             return None
         
-        print(f"✅ Tìm thấy dataset: {dataset_path}")
+        print(f"✅ Dataset đã có sẵn: {dataset_path}")
         return dataset_path
     
     def check_splits(self):
-        """Kiểm tra dataset splits có sẵn cho Linux"""
+        """Kiểm tra dataset splits có sẵn cho Linux từ /content/viLegalBert"""
         import os
         
-        splits_dir = "data/processed/dataset_splits"
+        # Base directory cho Google Colab
+        base_dir = "/content/viLegalBert"
+        
+        splits_dir = f"{base_dir}/data/processed/dataset_splits"
         train_path = os.path.join(splits_dir, "train.csv")
         val_path = os.path.join(splits_dir, "validation.csv")
         test_path = os.path.join(splits_dir, "test.csv")
@@ -367,6 +379,9 @@ class CompletePipeline:
         print("🚀 KHỞI ĐỘNG COMPLETE PIPELINE VỚI GPU OPTIMIZATION!")
         print("=" * 80)
         
+        # Base directory cho Google Colab
+        base_dir = "/content/viLegalBert"
+        
         # Bước 1: GPU setup
         print("\n🚀 BƯỚC 1: GPU SETUP")
         gpu_available = setup_gpu()
@@ -389,7 +404,7 @@ class CompletePipeline:
         print("\n🏋️ BƯỚC 5: TRAINING MODELS")
         training_success = True
         
-        dataset_path = "data/processed/hierarchical_legal_dataset.csv"
+        dataset_path = f"{base_dir}/data/processed/hierarchical_legal_dataset.csv"
         
         if 'svm' in self.config['train_models']:
             if not self.train_svm(dataset_path):

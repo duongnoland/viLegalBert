@@ -405,6 +405,9 @@ def main():
     print("🏋️ ENSEMBLE TRAINER - GPU OPTIMIZED")
     print("=" * 50)
     
+    # Base directory cho Google Colab
+    base_dir = "/content/viLegalBert"
+    
     # Bước 1: GPU setup
     print("\n🚀 BƯỚC 1: GPU SETUP")
     gpu_available = setup_gpu()
@@ -416,11 +419,11 @@ def main():
     # Bước 3: Tạo thư mục
     print("\n🏗️ BƯỚC 3: TẠO THƯ MỤC")
     import os
-    os.makedirs("models/saved_models/hierarchical_models", exist_ok=True)
+    os.makedirs(f"{base_dir}/models/saved_models/hierarchical_models", exist_ok=True)
     
     # Bước 4: Kiểm tra splits
     print("\n🔄 BƯỚC 4: KIỂM TRA SPLITS")
-    splits_dir = "data/processed/dataset_splits"
+    splits_dir = f"{base_dir}/data/processed/dataset_splits"
     train_path = os.path.join(splits_dir, "train.csv")
     val_path = os.path.join(splits_dir, "validation.csv")
     test_path = os.path.join(splits_dir, "test.csv")
@@ -450,7 +453,7 @@ def main():
     
     # Bước 7: Đánh giá ensemble
     print("\n📊 ĐÁNH GIÁ ENSEMBLE...")
-    evaluation_results = trainer.evaluate_ensemble("data/processed/dataset_splits/test.csv")
+    evaluation_results = trainer.evaluate_ensemble(f"{base_dir}/data/processed/dataset_splits/test.csv")
     
     # Tóm tắt kết quả
     print("\n🎉 ENSEMBLE TRAINING HOÀN THÀNH!")

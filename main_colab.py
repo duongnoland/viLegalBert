@@ -67,13 +67,16 @@ import joblib
 # ============================================================================
 
 def create_dirs():
-    """Tạo thư mục cho Linux"""
+    """Tạo thư mục cho Linux từ /content/viLegalBert"""
     import os
     
+    # Base directory cho Google Colab
+    base_dir = "/content/viLegalBert"
+    
     dirs = [
-        "models/saved_models/level1_classifier/svm_level1",
-        "models/saved_models/level2_classifier/svm_level2",
-        "data/processed/dataset_splits"
+        f"{base_dir}/models/saved_models/level1_classifier/svm_level1",
+        f"{base_dir}/models/saved_models/level2_classifier/svm_level2",
+        f"{base_dir}/data/processed/dataset_splits"
     ]
     
     for dir_path in dirs:
@@ -85,10 +88,13 @@ def create_dirs():
 # ============================================================================
 
 def check_splits():
-    """Kiểm tra dataset splits có sẵn cho Linux"""
+    """Kiểm tra dataset splits có sẵn cho Linux từ /content/viLegalBert"""
     import os
     
-    splits_dir = "data/processed/dataset_splits"
+    # Base directory cho Google Colab
+    base_dir = "/content/viLegalBert"
+    
+    splits_dir = f"{base_dir}/data/processed/dataset_splits"
     train_path = os.path.join(splits_dir, "train.csv")
     val_path = os.path.join(splits_dir, "validation.csv")
     test_path = os.path.join(splits_dir, "test.csv")
@@ -325,6 +331,9 @@ def main():
     print("🚀 VILEGALBERT PIPELINE - GPU OPTIMIZED")
     print("=" * 60)
     
+    # Base directory cho Google Colab
+    base_dir = "/content/viLegalBert"
+    
     # Bước 1: GPU setup
     print("\n🚀 BƯỚC 1: GPU SETUP")
     gpu_available = setup_gpu()
@@ -347,13 +356,13 @@ def main():
     print("\n🏋️ BƯỚC 5: TRAINING SVM")
     trainer = SVMTrainer()
     
-    dataset_path = "data/processed/hierarchical_legal_dataset.csv"
+    dataset_path = f"{base_dir}/data/processed/hierarchical_legal_dataset.csv"
     results_level1 = trainer.train_level1(dataset_path)
     results_level2 = trainer.train_level2(dataset_path)
     
     # Bước 6: Evaluation
     print("\n📊 BƯỚC 6: EVALUATION")
-    evaluate_models("data/processed/dataset_splits/test.csv")
+    evaluate_models(f"{base_dir}/data/processed/dataset_splits/test.csv")
     
     # Tóm tắt
     print("\n🎉 PIPELINE HOÀN THÀNH!")
