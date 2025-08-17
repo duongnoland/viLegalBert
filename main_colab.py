@@ -146,17 +146,19 @@ class SVMTrainer:
         
         print(f"🚀 SVMTrainer - GPU: {'✅' if self.use_gpu else '❌'}")
     
-    def train_level1(self, data_path):
+    def train_level1(self, data_path, val_path):
         """Training cho Level 1"""
         print("🏷️ Training Level 1...")
         
         # Load data
-        df = pd.read_csv(data_path, encoding='utf-8')
-        X = df['text'].fillna('')
-        y = df['type_level1']
+        df_train = pd.read_csv(data_path, encoding='utf-8')
+        df_val = pd.read_csv(val_path, encoding='utf-8')
         
-        # Chia data
-        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+        X_train = df_train['text'].fillna('')
+        y_train = df_train['type_level1']
+        
+        X_val = df_val['text'].fillna('')
+        y_val = df_val['type_level1']
         
         # TF-IDF + Feature Selection
         vectorizer = TfidfVectorizer(max_features=self.config['max_features'], ngram_range=(1, 2))
@@ -168,20 +170,34 @@ class SVMTrainer:
         X_val_selected = feature_selector.transform(X_val_tfidf)
         
         # Training với hyperparameter tuning nếu có GPU
+        print("🏋️ Bắt đầu training SVM...")
         if self.use_gpu:
             param_grid = {'C': [0.1, 1, 10], 'gamma': ['scale', 'auto'], 'kernel': ['rbf', 'linear']}
             grid_search = GridSearchCV(SVC(random_state=42, probability=True), param_grid, 
                                      cv=self.config['cv'], n_jobs=-1, verbose=self.config['verbose'])
+            
+            print("📊 Progress: Training với Grid Search...")
+            print("⏳ 0% - Khởi tạo Grid Search...")
             grid_search.fit(X_train_selected, y_train)
+            print("✅ 100% - Grid Search hoàn thành!")
+            
             svm = grid_search.best_estimator_
             print(f"✅ Best params: {grid_search.best_params_}")
         else:
+            print("📊 Progress: Training SVM cơ bản...")
+            print("⏳ 0% - Khởi tạo SVM...")
             svm = SVC(kernel='rbf', random_state=42, probability=True)
+            print("⏳ 50% - Đang training...")
             svm.fit(X_train_selected, y_train)
+            print("✅ 100% - SVM training hoàn thành!")
         
         # Evaluation
+        print("📊 Progress: Đánh giá model...")
+        print("⏳ 80% - Prediction trên validation set...")
         y_pred = svm.predict(X_val_selected)
+        print("⏳ 90% - Tính toán accuracy...")
         accuracy = accuracy_score(y_val, y_pred)
+        print("✅ 100% - Evaluation hoàn thành!")
         
         print(f"✅ Level 1 Accuracy: {accuracy:.4f}")
         print(classification_report(y_val, y_pred))
@@ -205,17 +221,19 @@ class SVMTrainer:
         print(f"💾 Model đã lưu: {model_path}")
         return {'accuracy': accuracy, 'model_path': model_path, 'gpu_optimized': self.use_gpu}
     
-    def train_level2(self, data_path):
+    def train_level2(self, data_path, val_path):
         """Training cho Level 2"""
         print("🏷️ Training Level 2...")
         
         # Load data
-        df = pd.read_csv(data_path, encoding='utf-8')
-        X = df['text'].fillna('')
-        y = df['domain_level2']
+        df_train = pd.read_csv(data_path, encoding='utf-8')
+        df_val = pd.read_csv(val_path, encoding='utf-8')
         
-        # Chia data
-        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+        X_train = df_train['text'].fillna('')
+        y_train = df_train['domain_level2']
+        
+        X_val = df_val['text'].fillna('')
+        y_val = df_val['domain_level2']
         
         # TF-IDF + Feature Selection
         vectorizer = TfidfVectorizer(max_features=self.config['max_features'], ngram_range=(1, 2))
@@ -227,19 +245,33 @@ class SVMTrainer:
         X_val_selected = feature_selector.transform(X_val_tfidf)
         
         # Training
+        print("🏋️ Bắt đầu training SVM Level 2...")
         if self.use_gpu:
             param_grid = {'C': [0.1, 1, 10], 'gamma': ['scale', 'auto'], 'kernel': ['rbf', 'linear']}
             grid_search = GridSearchCV(SVC(random_state=42, probability=True), param_grid, 
                                      cv=self.config['cv'], n_jobs=-1, verbose=self.config['verbose'])
+            
+            print("📊 Progress: Training với Grid Search...")
+            print("⏳ 0% - Khởi tạo Grid Search...")
             grid_search.fit(X_train_selected, y_train)
+            print("✅ 100% - Grid Search hoàn thành!")
+            
             svm = grid_search.best_estimator_
         else:
+            print("📊 Progress: Training SVM cơ bản...")
+            print("⏳ 0% - Khởi tạo SVM...")
             svm = SVC(kernel='rbf', random_state=42, probability=True)
+            print("⏳ 50% - Đang training...")
             svm.fit(X_train_selected, y_train)
+            print("✅ 100% - SVM training hoàn thành!")
         
         # Evaluation
+        print("📊 Progress: Đánh giá model...")
+        print("⏳ 80% - Prediction trên validation set...")
         y_pred = svm.predict(X_val_selected)
+        print("⏳ 90% - Tính toán accuracy...")
         accuracy = accuracy_score(y_val, y_pred)
+        print("✅ 100% - Evaluation hoàn thành!")
         
         print(f"✅ Level 2 Accuracy: {accuracy:.4f}")
         print(classification_report(y_val, y_pred))
@@ -364,10 +396,12 @@ def main():
     print("\n🏋️ BƯỚC 5: TRAINING SVM")
     trainer = SVMTrainer()
     
-    # ĐÚNG: Training chỉ trên train set
+    # ĐÚNG: Training sử dụng train.csv và validation.csv có sẵn
     train_path = f"{base_dir}/data/processed/dataset_splits/train.csv"
-    results_level1 = trainer.train_level1(train_path)  # Chỉ training trên train set
-    results_level2 = trainer.train_level2(train_path)  # Chỉ training trên train set
+    val_path = f"{base_dir}/data/processed/dataset_splits/validation.csv"
+    
+    results_level1 = trainer.train_level1(train_path, val_path)  # Truyền cả train và val
+    results_level2 = trainer.train_level2(train_path, val_path)  # Truyền cả train và val
     
     # Bước 6: Evaluation
     print("\n📊 BƯỚC 6: EVALUATION")

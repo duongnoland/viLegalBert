@@ -400,6 +400,57 @@ class EnsembleTrainer:
             'ensemble_path': ensemble_path
         }
 
+    def create_ensemble(self):
+        """Tạo ensemble model từ các models đã trained"""
+        print("🏋️ Bắt đầu tạo ensemble model...")
+        print("📊 Progress: Khởi tạo ensemble...")
+        print("⏳ 0% - Kiểm tra models có sẵn...")
+        
+        # Load các models
+        print("⏳ 20% - Loading SVM models...")
+        svm_loaded = self.load_svm_models()
+        
+        print("⏳ 40% - Loading PhoBERT models...")  
+        phobert_loaded = self.load_phobert_models()
+        
+        print("⏳ 60% - Loading BiLSTM models...")
+        bilstm_loaded = self.load_bilstm_models()
+        
+        if not any([svm_loaded, phobert_loaded, bilstm_loaded]):
+            print("❌ Không có model nào được load thành công")
+            return {'ensemble_path': None, 'success': False}
+        
+        print(f"✅ 80% - Đã load {sum([svm_loaded, phobert_loaded, bilstm_loaded])} models")
+        
+        # Tạo ensemble
+        print("📊 Progress: Tạo ensemble structure...")
+        print("⏳ 90% - Cấu hình ensemble...")
+        
+        ensemble_data = {
+            'svm_models': self.models['svm'] if svm_loaded else None,
+            'phobert_models': self.models['phobert'] if phobert_loaded else None,
+            'bilstm_models': self.models['bilstm'] if bilstm_loaded else None,
+            'loaded_models': {
+                'svm': svm_loaded,
+                'phobert': phobert_loaded, 
+                'bilstm': bilstm_loaded
+            }
+        }
+        
+        # Lưu ensemble
+        print("⏳ 95% - Lưu ensemble model...")
+        base_dir = "/content/viLegalBert"
+        ensemble_path = f"{base_dir}/models/saved_models/hierarchical_models/ensemble_model.pkl"
+        os.makedirs(os.path.dirname(ensemble_path), exist_ok=True)
+        
+        with open(ensemble_path, 'wb') as f:
+            pickle.dump(ensemble_data, f)
+        
+        print("✅ 100% - Ensemble model đã tạo thành công!")
+        print(f"💾 Ensemble đã lưu: {ensemble_path}")
+        
+        return {'ensemble_path': ensemble_path, 'success': True}
+
 def main():
     """Hàm chính"""
     print("🏋️ ENSEMBLE TRAINER - GPU OPTIMIZED")

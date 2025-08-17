@@ -403,19 +403,20 @@ class CompletePipeline:
         print("\n🏋️ BƯỚC 5: TRAINING MODELS")
         training_success = True
         
-        # ĐÚNG: Training chỉ trên train set
+        # ĐÚNG: Training sử dụng train.csv và validation.csv có sẵn
         train_path = f"{base_dir}/data/processed/dataset_splits/train.csv"
+        val_path = f"{base_dir}/data/processed/dataset_splits/validation.csv"
         
         if 'svm' in self.config['train_models']:
-            if not self.train_svm(train_path):  # Chỉ training trên train set
+            if not self.train_svm(train_path, val_path):  # Truyền cả train và val
                 training_success = False
         
         if 'phobert' in self.config['train_models']:
-            if not self.train_phobert(train_path):  # Chỉ training trên train set
+            if not self.train_phobert(train_path, val_path):  # Truyền cả train và val
                 training_success = False
         
         if 'bilstm' in self.config['train_models']:
-            if not self.train_bilstm(train_path):  # Chỉ training trên train set
+            if not self.train_bilstm(train_path, val_path):  # Truyền cả train và val
                 training_success = False
         
         if not training_success:

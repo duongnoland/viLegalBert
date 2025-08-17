@@ -147,7 +147,7 @@ class PhoBERTTrainer:
         
         return dataset
     
-    def train_level1(self, data_path):
+    def train_level1(self, data_path, val_path):
         """Training cho Level 1"""
         print("🏷️ Training Level 1...")
         
@@ -167,24 +167,26 @@ class PhoBERTTrainer:
         # Load model
         self.load_model(num_labels)
         
-        # Chia data
-        train_texts, val_texts, train_labels, val_labels = train_test_split(
-            texts, labels, test_size=0.2, random_state=42, stratify=labels
-        )
-        
         # Chuẩn bị datasets
-        train_dataset = self.prepare_dataset(train_texts, train_labels, self.config['max_length'])
+        train_dataset = self.prepare_dataset(texts, labels, self.config['max_length'])
+        
+        # Load validation data
+        val_df = pd.read_csv(val_path, encoding='utf-8')
+        val_texts = val_df['text'].fillna('').tolist()
+        val_labels = label_encoder.transform(val_df['type_level1'])
+        
         val_dataset = self.prepare_dataset(val_texts, val_labels, self.config['max_length'])
         
         # Cấu hình training
+        base_dir = "/content/viLegalBert"
         training_args = TrainingArguments(
-            output_dir="./phobert_level1_results",
+            output_dir=f"{base_dir}/phobert_level1_results",
             num_train_epochs=self.config['num_epochs'],
             per_device_train_batch_size=self.config['batch_size'],
             per_device_eval_batch_size=self.config['batch_size'],
             warmup_steps=self.config['warmup_steps'],
             weight_decay=self.config['weight_decay'],
-            logging_dir="./phobert_level1_logs",
+            logging_dir=f"{base_dir}/phobert_level1_logs",
             logging_steps=100,
             evaluation_strategy="steps",
             eval_steps=500,
@@ -210,17 +212,26 @@ class PhoBERTTrainer:
         )
         
         # Training
-        print("🏋️ Bắt đầu training...")
+        print("🏋️ Bắt đầu training PhoBERT Level 1...")
+        print("📊 Progress: Chuẩn bị training...")
+        print("⏳ 0% - Khởi tạo Trainer...")
+        
         if self.use_gpu:
             print(f"🚀 GPU: Batch size {self.config['batch_size']}, Mixed precision {'✅' if self.config['fp16'] else '❌'}")
         
+        print("⏳ 10% - Bắt đầu training epochs...")
         trainer.train()
+        print("✅ 80% - Training epochs hoàn thành!")
         
         # Evaluation
-        print("📊 Evaluation...")
+        print("📊 Progress: Đánh giá model...")
+        print("⏳ 90% - Chạy evaluation...")
         eval_results = trainer.evaluate()
+        print("✅ 95% - Evaluation hoàn thành!")
         
         # Lưu model
+        print("📊 Progress: Lưu model...")
+        print("⏳ 98% - Lưu model và tokenizer...")
         base_dir = "/content/viLegalBert"
         model_path = f"{base_dir}/models/saved_models/level1_classifier/phobert_level1/phobert_level1_model"
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
@@ -235,6 +246,7 @@ class PhoBERTTrainer:
         with open(f"{model_path}/training_config.pkl", 'wb') as f:
             pickle.dump(self.config, f)
         
+        print("✅ 100% - PhoBERT Level 1 training hoàn thành!")
         print(f"💾 Model đã lưu: {model_path}")
         return {
             'model_path': model_path,
@@ -243,7 +255,7 @@ class PhoBERTTrainer:
             'gpu_optimized': self.use_gpu
         }
     
-    def train_level2(self, data_path):
+    def train_level2(self, data_path, val_path):
         """Training cho Level 2"""
         print("🏷️ Training Level 2...")
         
@@ -263,24 +275,26 @@ class PhoBERTTrainer:
         # Load model
         self.load_model(num_labels)
         
-        # Chia data
-        train_texts, val_texts, train_labels, val_labels = train_test_split(
-            texts, labels, test_size=0.2, random_state=42, stratify=labels
-        )
-        
         # Chuẩn bị datasets
-        train_dataset = self.prepare_dataset(train_texts, train_labels, self.config['max_length'])
+        train_dataset = self.prepare_dataset(texts, labels, self.config['max_length'])
+        
+        # Load validation data
+        val_df = pd.read_csv(val_path, encoding='utf-8')
+        val_texts = val_df['text'].fillna('').tolist()
+        val_labels = label_encoder.transform(val_df['domain_level2'])
+        
         val_dataset = self.prepare_dataset(val_texts, val_labels, self.config['max_length'])
         
         # Cấu hình training
+        base_dir = "/content/viLegalBert"
         training_args = TrainingArguments(
-            output_dir="./phobert_level2_results",
+            output_dir=f"{base_dir}/phobert_level2_results",
             num_train_epochs=self.config['num_epochs'],
             per_device_train_batch_size=self.config['batch_size'],
             per_device_eval_batch_size=self.config['batch_size'],
             warmup_steps=self.config['warmup_steps'],
             weight_decay=self.config['weight_decay'],
-            logging_dir="./phobert_level2_logs",
+            logging_dir=f"{base_dir}/phobert_level2_logs",
             logging_steps=100,
             evaluation_strategy="steps",
             eval_steps=500,
@@ -306,17 +320,26 @@ class PhoBERTTrainer:
         )
         
         # Training
-        print("🏋️ Bắt đầu training...")
+        print("🏋️ Bắt đầu training PhoBERT Level 2...")
+        print("📊 Progress: Chuẩn bị training...")
+        print("⏳ 0% - Khởi tạo Trainer...")
+        
         if self.use_gpu:
             print(f"🚀 GPU: Batch size {self.config['batch_size']}, Mixed precision {'✅' if self.config['fp16'] else '❌'}")
         
+        print("⏳ 10% - Bắt đầu training epochs...")
         trainer.train()
+        print("✅ 80% - Training epochs hoàn thành!")
         
         # Evaluation
-        print("📊 Evaluation...")
+        print("📊 Progress: Đánh giá model...")
+        print("⏳ 90% - Chạy evaluation...")
         eval_results = trainer.evaluate()
+        print("✅ 95% - Evaluation hoàn thành!")
         
         # Lưu model
+        print("📊 Progress: Lưu model...")
+        print("⏳ 98% - Lưu model và tokenizer...")
         base_dir = "/content/viLegalBert"
         model_path = f"{base_dir}/models/saved_models/level2_classifier/phobert_level2/phobert_level2_model"
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
@@ -331,6 +354,7 @@ class PhoBERTTrainer:
         with open(f"{model_path}/training_config.pkl", 'wb') as f:
             pickle.dump(self.config, f)
         
+        print("✅ 100% - PhoBERT Level 2 training hoàn thành!")
         print(f"💾 Model đã lưu: {model_path}")
         return {
             'model_path': model_path,
@@ -390,11 +414,12 @@ def main():
     # Bước 6: Training Level 1
     print("\n🏷️ TRAINING LEVEL 1...")
     train_path = f"{base_dir}/data/processed/dataset_splits/train.csv"
-    results_level1 = trainer.train_level1(train_path)  # Chỉ training trên train set
+    val_path = f"{base_dir}/data/processed/dataset_splits/validation.csv"
+    results_level1 = trainer.train_level1(train_path, val_path)  # Truyền cả train và val
     
     # Bước 7: Training Level 2
     print("\n🏷️ TRAINING LEVEL 2...")
-    results_level2 = trainer.train_level2(train_path)  # Chỉ training trên train set
+    results_level2 = trainer.train_level2(train_path, val_path)  # Truyền cả train và val
     
     # Tóm tắt kết quả
     print("\n🎉 PHOBERT TRAINING HOÀN THÀNH!")

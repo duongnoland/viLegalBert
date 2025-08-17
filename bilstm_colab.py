@@ -256,31 +256,48 @@ class BiLSTMTrainer:
             patience=self.config['scheduler_patience'], verbose=True
         )
         
-        # Training history
-        train_losses, val_losses, val_accuracies = [], [], []
+        # Training loop
+        train_losses = []
+        val_losses = []
+        val_accuracies = []
         best_val_loss = float('inf')
         patience_counter = 0
         
+        print(f"🏋️ Bắt đầu training BiLSTM với {self.config['num_epochs']} epochs...")
+        print("📊 Progress: Khởi tạo training loop...")
+        
         for epoch in range(self.config['num_epochs']):
+            # Progress tracking
+            epoch_progress = ((epoch + 1) / self.config['num_epochs']) * 80  # 80% for training
+            print(f"⏳ {epoch_progress:.1f}% - Epoch {epoch+1}/{self.config['num_epochs']}")
+            
             # Training phase
             self.model.train()
             train_loss = 0.0
             
-            for batch_features, batch_labels in train_loader:
+            for batch_idx, (batch_features, batch_labels) in enumerate(train_loader):
                 batch_features = batch_features.to(self.device)
                 batch_labels = batch_labels.squeeze().to(self.device)
                 
                 optimizer.zero_grad()
                 outputs = self.model(batch_features)
                 loss = criterion(outputs, batch_labels)
-                loss.backward()
                 
-                # Gradient clipping cho GPU
-                if self.config['gradient_clip'] and self.use_gpu:
+                if self.use_gpu:
+                    loss.backward()
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['gradient_clip'])
+                else:
+                    loss.backward()
                 
                 optimizer.step()
                 train_loss += loss.item()
+                
+                # Mini-batch progress
+                if batch_idx % 10 == 0:
+                    batch_progress = (batch_idx / len(train_loader)) * 10  # 10% of epoch
+                    total_progress = epoch_progress + batch_progress
+                    if total_progress <= 80:  # Don't exceed 80% during training
+                        print(f"    ⏳ {total_progress:.1f}% - Batch {batch_idx}/{len(train_loader)}")
             
             # Validation phase
             self.model.eval()
@@ -317,28 +334,38 @@ class BiLSTMTrainer:
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss
                 patience_counter = 0
-                torch.save(self.model.state_dict(), 'best_bilstm_model.pth')
+                base_dir = "/content/viLegalBert"
+                torch.save(self.model.state_dict(), f'{base_dir}/best_bilstm_model.pth')
+                print(f"    ✅ {epoch_progress:.1f}% - Best model saved!")
             else:
                 patience_counter += 1
             
-            # Print progress
-            print(f"Epoch {epoch+1}/{self.config['num_epochs']}:")
-            print(f"  Train Loss: {avg_train_loss:.4f}")
-            print(f"  Val Loss: {avg_val_loss:.4f}")
-            print(f"  Val Accuracy: {val_accuracy:.4f}")
-            print(f"  Learning Rate: {optimizer.param_groups[0]['lr']:.6f}")
+            # Print epoch results
+            print(f"    📊 Epoch {epoch+1} Results:")
+            print(f"      Train Loss: {avg_train_loss:.4f}")
+            print(f"      Val Loss: {avg_val_loss:.4f}")
+            print(f"      Val Accuracy: {val_accuracy:.4f}")
+            print(f"      Learning Rate: {optimizer.param_groups[0]['lr']:.6f}")
             if self.use_gpu:
-                print(f"  GPU Memory: {torch.cuda.memory_allocated()/1024**3:.2f} GB")
+                print(f"      GPU Memory: {torch.cuda.memory_allocated()/1024**3:.2f} GB")
             
             # Early stopping check
             if patience_counter >= self.config['early_stopping_patience']:
-                print(f"🛑 Early stopping at epoch {epoch+1}")
+                print(f"    🛑 Early stopping at epoch {epoch+1}")
                 break
         
+        print("✅ 80% - Training epochs hoàn thành!")
+        
         # Load best model
-        if os.path.exists('best_bilstm_model.pth'):
-            self.model.load_state_dict(torch.load('best_bilstm_model.pth', map_location=self.device))
-            print(f"✅ Loaded best model")
+        print("📊 Progress: Load best model...")
+        print("⏳ 90% - Loading best model...")
+        base_dir = "/content/viLegalBert"
+        best_model_path = f'{base_dir}/best_bilstm_model.pth'
+        if os.path.exists(best_model_path):
+            self.model.load_state_dict(torch.load(best_model_path, map_location=self.device))
+            print(f"✅ 95% - Loaded best model")
+        
+        print("✅ 100% - BiLSTM training hoàn thành!")
         
         return {
             'train_losses': train_losses,
@@ -346,34 +373,61 @@ class BiLSTMTrainer:
             'val_accuracies': val_accuracies
         }
     
-    def train_level1(self, data_path):
+    def train_level1(self, data_path, val_path):
         """Training cho Level 1"""
         print("🏷️ Training Level 1...")
         
-        # Load data
-        df = pd.read_csv(data_path, encoding='utf-8')
-        texts = df['text'].fillna('').tolist()
-        labels = df['type_level1'].tolist()
+        # Load training data
+        df_train = pd.read_csv(data_path, encoding='utf-8')
+        texts_train = df_train['text'].fillna('').tolist()
         
-        # Prepare data
-        X_tfidf, y_encoded, num_classes = self.prepare_data(texts, labels)
+        # Load validation data
+        df_val = pd.read_csv(val_path, encoding='utf-8')
+        texts_val = df_val['text'].fillna('').tolist()
+        
+        # Chuẩn bị dữ liệu
+        print("📊 Chuẩn bị dữ liệu...")
+        
+        # Encode labels
+        self.label_encoder = LabelEncoder()
+        labels_train = self.label_encoder.fit_transform(df_train['type_level1'])
+        labels_val = self.label_encoder.transform(df_val['type_level1'])
+        
+        num_classes = len(self.label_encoder.classes_)
+        print(f"📊 Số classes: {num_classes}")
+        print(f"📊 Train samples: {len(texts_train)}")
+        print(f"📊 Validation samples: {len(texts_val)}")
+        
+        # TF-IDF Vectorization
+        self.vectorizer = TfidfVectorizer(
+            max_features=self.config['max_features'],
+            ngram_range=(1, 2),
+            stop_words=None
+        )
+        
+        # Fit trên training data
+        self.vectorizer.fit(texts_train)
+        
+        # Datasets
+        train_dataset = TextDataset(texts_train, labels_train, self.vectorizer, self.config['max_length'])
+        val_dataset = TextDataset(texts_val, labels_val, self.vectorizer, self.config['max_length'])
         
         # Create model
-        self.create_model(X_tfidf.shape[1], num_classes)
+        self.create_model(self.vectorizer.transform(texts_train).shape[1], num_classes)
         
         # Split data
         X_train, X_val, y_train, y_val = train_test_split(
-            X_tfidf, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
+            self.vectorizer.transform(texts_train).toarray(), labels_train, test_size=0.2, random_state=42, stratify=labels_train
         )
         
         # Create datasets
         train_dataset = TextDataset(
-            [texts[i] for i in np.where(X_train.toarray().sum(axis=1) > 0)[0]],
+            [texts_train[i] for i in np.where(X_train.sum(axis=1) > 0)[0]],
             y_train, self.vectorizer, self.config['max_length']
         )
         
         val_dataset = TextDataset(
-            [texts[i] for i in np.where(X_val.toarray().sum(axis=1) > 0)[0]],
+            [texts_val[i] for i in np.where(X_val.sum(axis=1) > 0)[0]],
             y_val, self.vectorizer, self.config['max_length']
         )
         
@@ -389,13 +443,19 @@ class BiLSTMTrainer:
         )
         
         # Training
+        print("📊 Progress: Bắt đầu training pipeline...")
+        print("⏳ 0% - Chuẩn bị training...")
         history = self.train_model(train_loader, val_loader, num_classes)
+        print("⏳ 85% - Training model hoàn thành!")
         
         # Save model
+        print("📊 Progress: Lưu model...")
+        print("⏳ 90% - Chuẩn bị lưu model...")
         base_dir = "/content/viLegalBert"
         model_path = f"{base_dir}/models/saved_models/level1_classifier/bilstm_level1/bilstm_level1_model.pkl"
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
         
+        print("⏳ 95% - Lưu model state và config...")
         model_data = {
             'model_state_dict': self.model.state_dict(),
             'vectorizer': self.vectorizer,
@@ -407,6 +467,7 @@ class BiLSTMTrainer:
         with open(model_path, 'wb') as f:
             pickle.dump(model_data, f)
         
+        print("✅ 100% - BiLSTM Level 1 training hoàn thành!")
         print(f"💾 Model đã lưu: {model_path}")
         return {
             'model_path': model_path,
@@ -415,34 +476,61 @@ class BiLSTMTrainer:
             'gpu_optimized': self.use_gpu
         }
     
-    def train_level2(self, data_path):
+    def train_level2(self, data_path, val_path):
         """Training cho Level 2"""
         print("🏷️ Training Level 2...")
         
-        # Load data
-        df = pd.read_csv(data_path, encoding='utf-8')
-        texts = df['text'].fillna('').tolist()
-        labels = df['domain_level2'].tolist()
+        # Load training data
+        df_train = pd.read_csv(data_path, encoding='utf-8')
+        texts_train = df_train['text'].fillna('').tolist()
         
-        # Prepare data
-        X_tfidf, y_encoded, num_classes = self.prepare_data(texts, labels)
+        # Load validation data
+        df_val = pd.read_csv(val_path, encoding='utf-8')
+        texts_val = df_val['text'].fillna('').tolist()
+        
+        # Chuẩn bị dữ liệu
+        print("📊 Chuẩn bị dữ liệu...")
+        
+        # Encode labels
+        self.label_encoder = LabelEncoder()
+        labels_train = self.label_encoder.fit_transform(df_train['domain_level2'])
+        labels_val = self.label_encoder.transform(df_val['domain_level2'])
+        
+        num_classes = len(self.label_encoder.classes_)
+        print(f"📊 Số classes: {num_classes}")
+        print(f"📊 Train samples: {len(texts_train)}")
+        print(f"📊 Validation samples: {len(texts_val)}")
+        
+        # TF-IDF Vectorization
+        self.vectorizer = TfidfVectorizer(
+            max_features=self.config['max_features'],
+            ngram_range=(1, 2),
+            stop_words=None
+        )
+        
+        # Fit trên training data
+        self.vectorizer.fit(texts_train)
+        
+        # Datasets
+        train_dataset = TextDataset(texts_train, labels_train, self.vectorizer, self.config['max_length'])
+        val_dataset = TextDataset(texts_val, labels_val, self.vectorizer, self.config['max_length'])
         
         # Create model
-        self.create_model(X_tfidf.shape[1], num_classes)
+        self.create_model(self.vectorizer.transform(texts_train).shape[1], num_classes)
         
         # Split data
         X_train, X_val, y_train, y_val = train_test_split(
-            X_tfidf, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded
+            self.vectorizer.transform(texts_train).toarray(), labels_train, test_size=0.2, random_state=42, stratify=labels_train
         )
         
         # Create datasets
         train_dataset = TextDataset(
-            [texts[i] for i in np.where(X_train.toarray().sum(axis=1) > 0)[0]],
+            [texts_train[i] for i in np.where(X_train.sum(axis=1) > 0)[0]],
             y_train, self.vectorizer, self.config['max_length']
         )
         
         val_dataset = TextDataset(
-            [texts[i] for i in np.where(X_val.toarray().sum(axis=1) > 0)[0]],
+            [texts_val[i] for i in np.where(X_val.sum(axis=1) > 0)[0]],
             y_val, self.vectorizer, self.config['max_length']
         )
         
@@ -458,13 +546,19 @@ class BiLSTMTrainer:
         )
         
         # Training
+        print("📊 Progress: Bắt đầu training pipeline Level 2...")
+        print("⏳ 0% - Chuẩn bị training...")
         history = self.train_model(train_loader, val_loader, num_classes)
+        print("⏳ 85% - Training model hoàn thành!")
         
         # Save model
+        print("📊 Progress: Lưu model...")
+        print("⏳ 90% - Chuẩn bị lưu model...")
         base_dir = "/content/viLegalBert"
         model_path = f"{base_dir}/models/saved_models/level2_classifier/bilstm_level2/bilstm_level2_model.pkl"
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
         
+        print("⏳ 95% - Lưu model state và config...")
         model_data = {
             'model_state_dict': self.model.state_dict(),
             'vectorizer': self.vectorizer,
@@ -476,6 +570,7 @@ class BiLSTMTrainer:
         with open(model_path, 'wb') as f:
             pickle.dump(model_data, f)
         
+        print("✅ 100% - BiLSTM Level 2 training hoàn thành!")
         print(f"💾 Model đã lưu: {model_path}")
         return {
             'model_path': model_path,
@@ -535,11 +630,12 @@ def main():
     # Bước 6: Training Level 1
     print("\n🏷️ TRAINING LEVEL 1...")
     train_path = f"{base_dir}/data/processed/dataset_splits/train.csv"
-    results_level1 = trainer.train_level1(train_path)  # Chỉ training trên train set
+    val_path = f"{base_dir}/data/processed/dataset_splits/validation.csv"
+    results_level1 = trainer.train_level1(train_path, val_path)  # Truyền cả train và val
     
     # Bước 7: Training Level 2
     print("\n🏷️ TRAINING LEVEL 2...")
-    results_level2 = trainer.train_level2(train_path)  # Chỉ training trên train set
+    results_level2 = trainer.train_level2(train_path, val_path)  # Truyền cả train và val
     
     # Tóm tắt kết quả
     print("\n🎉 BILSTM TRAINING HOÀN THÀNH!")
