@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🏋️ PhoBERT Trainer cho Google Colab
+🏋️ PhoBERT Trainer cho Google Colab (Dataset Có Sẵn)
 Phân loại văn bản pháp luật Việt Nam với PhoBERT
 """
 
@@ -141,7 +141,7 @@ class PhoBERTTrainer:
         
         # Chuẩn bị datasets
         train_dataset = self.prepare_dataset(train_texts, train_labels, self.config['max_length'])
-        val_dataset = self.prepare_dataset(val_texts, val_labels, self.config['max_length'])
+        val_dataset = self.prepare_dataset(val_labels, val_labels, self.config['max_length'])
         
         # Cấu hình training
         training_args = TrainingArguments(
@@ -295,6 +295,7 @@ class PhoBERTTrainer:
 def main():
     """Hàm chính"""
     print("🏋️ PHOBERT TRAINER CHO GOOGLE COLAB!")
+    print("📊 SỬ DỤNG DATASET CÓ SẴN")
     print("=" * 50)
     
     # Cài đặt dependencies
@@ -305,16 +306,38 @@ def main():
     Path("models/saved_models/level1_classifier/phobert_level1").mkdir(parents=True, exist_ok=True)
     Path("models/saved_models/level2_classifier/phobert_level2").mkdir(parents=True, exist_ok=True)
     
+    # Kiểm tra dataset có sẵn
+    dataset_path = "data/processed/hierarchical_legal_dataset.csv"
+    if not Path(dataset_path).exists():
+        print(f"❌ Không tìm thấy dataset: {dataset_path}")
+        print("🔍 Tìm kiếm dataset trong các thư mục...")
+        
+        possible_paths = [
+            "hierarchical_legal_dataset.csv",
+            "data/hierarchical_legal_dataset.csv",
+            "dataset.csv",
+            "legal_dataset.csv"
+        ]
+        
+        for path in possible_paths:
+            if Path(path).exists():
+                dataset_path = path
+                print(f"✅ Tìm thấy dataset: {dataset_path}")
+                break
+        else:
+            print("❌ Không tìm thấy dataset nào. Vui lòng upload dataset vào Colab")
+            return
+    
     # Khởi tạo trainer
     trainer = PhoBERTTrainer()
     
     # Training Level 1
     print("\n🏷️ TRAINING LEVEL 1...")
-    results_level1 = trainer.train_level1("data/processed/hierarchical_legal_dataset.csv")
+    results_level1 = trainer.train_level1(dataset_path)
     
     # Training Level 2
     print("\n🏷️ TRAINING LEVEL 2...")
-    results_level2 = trainer.train_level2("data/processed/hierarchical_legal_dataset.csv")
+    results_level2 = trainer.train_level2(dataset_path)
     
     print("\n🎉 PHOBERT TRAINING HOÀN THÀNH!")
     print(f"📊 Level 1 model: {results_level1['model_path']}")

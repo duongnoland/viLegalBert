@@ -1,8 +1,8 @@
-# 🚀 **viLegalBert - Complete Pipeline cho Google Colab**
+# 🚀 **viLegalBert - Complete Pipeline cho Google Colab (Dataset Có Sẵn)**
 
 ## 📋 **Tổng Quan**
 
-viLegalBert là hệ thống phân loại văn bản pháp luật Việt Nam với kiến trúc phân cấp 2 tầng, được thiết kế để chạy hoàn toàn trên Google Colab.
+viLegalBert là hệ thống phân loại văn bản pháp luật Việt Nam với kiến trúc phân cấp 2 tầng, được thiết kế để chạy hoàn toàn trên Google Colab **với dataset có sẵn**.
 
 ## 🎯 **Kiến Trúc 2 Tầng**
 
@@ -56,37 +56,38 @@ viLegalBert là hệ thống phân loại văn bản pháp luật Việt Nam v�
 - **Weights**: SVM (40%), PhoBERT (30%), BiLSTM (30%)
 - **Benefits**: Tăng độ chính xác, giảm overfitting
 
-## 📁 **Files Pipeline**
+## 📁 **Files Pipeline (Đã Tối Ưu)**
 
-### **🚀 Main Pipeline**
-- **`main_colab.py`**: Pipeline cơ bản với SVM
-- **`phobert_colab.py`**: Training PhoBERT models
-- **`bilstm_colab.py`**: Training BiLSTM models
+### **🚀 Core Pipeline Files**
+- **`main_colab.py`**: Pipeline cơ bản với SVM (dataset có sẵn)
+- **`phobert_colab.py`**: Training PhoBERT models (dataset có sẵn)
+- **`bilstm_colab.py`**: Training BiLSTM models (dataset có sẵn)
 - **`ensemble_colab.py`**: Tạo và đánh giá ensemble
-- **`complete_pipeline_colab.py`**: Pipeline hoàn chỉnh tích hợp tất cả
+- **`complete_pipeline_colab.py`**: Pipeline hoàn chỉnh tích hợp tất cả (dataset có sẵn)
 
 ### **📖 Documentation**
-- **`COLAB_USAGE.md`**: Hướng dẫn sử dụng cơ bản
-- **`README_COLAB.md`**: Tổng quan project
 - **`README_PIPELINE.md`**: File này - Hướng dẫn chi tiết
 
-### **🎯 Demo & Examples**
-- **`demo_colab.py`**: Demo đơn giản để test
-
-## 🚀 **Cách Sử Dụng**
+## 🚀 **Cách Sử Dụng (Dataset Có Sẵn)**
 
 ### **Bước 1: Chuẩn Bị Google Colab**
 1. Mở [Google Colab](https://colab.research.google.com)
 2. Tạo notebook mới
-3. Upload file `vbpl_crawl.json` vào Colab
+3. **Upload dataset CSV** (không cần JSON gốc)
 4. Đảm bảo runtime type là **GPU** (khuyến nghị)
 
-### **Bước 2: Chọn Pipeline**
+### **Bước 2: Chuẩn Bị Dataset**
+Dataset cần có các cột sau:
+- **`text`**: Nội dung văn bản
+- **`type_level1`**: Loại văn bản (Level 1)
+- **`domain_level2`**: Domain pháp lý (Level 2)
+
+### **Bước 3: Chọn Pipeline**
 
 #### **🎯 Option 1: Pipeline Cơ Bản (SVM)**
 ```python
 # Copy toàn bộ main_colab.py vào cell và chạy
-# Chỉ training SVM models
+# Tự động tìm dataset và training SVM
 ```
 
 #### **🚀 Option 2: Pipeline Nâng Cao (PhoBERT + BiLSTM)**
@@ -102,25 +103,45 @@ viLegalBert là hệ thống phân loại văn bản pháp luật Việt Nam v�
 # Tự động training tất cả models và tạo ensemble
 ```
 
-### **Bước 3: Chạy Pipeline**
+### **Bước 4: Chạy Pipeline**
 ```python
 # Chạy cell để khởi động pipeline
 # Quá trình sẽ tự động:
 # 1. Cài đặt dependencies
 # 2. Tạo cấu trúc project
-# 3. Tạo dataset 10K samples
-# 4. Training các models
-# 5. Tạo ensemble (nếu chọn)
-# 6. Evaluation và báo cáo
+# 3. Tìm và load dataset có sẵn
+# 4. Kiểm tra/tạo dataset splits
+# 5. Training các models
+# 6. Tạo ensemble (nếu chọn)
+# 7. Evaluation và báo cáo
 ```
 
-## 📊 **Kết Quả Mong Đợi**
+## 📊 **Dataset Requirements**
 
-### **📈 Dataset**
-- **Tổng samples**: 10,000
-- **Train set**: 7,000 (70%)
-- **Validation set**: 1,500 (15%)
-- **Test set**: 1,500 (15%)
+### **📋 Format Yêu Cầu**
+- **File type**: CSV với encoding UTF-8
+- **Required columns**: `text`, `type_level1`, `domain_level2`
+- **Optional columns**: `id`, `ministry`, `name`, `chapter`, `article`
+
+### **🔍 Tự Động Tìm Kiếm**
+Pipeline sẽ tự động tìm dataset trong các đường dẫn:
+1. `data/processed/hierarchical_legal_dataset.csv`
+2. `hierarchical_legal_dataset.csv`
+3. `data/hierarchical_legal_dataset.csv`
+4. `dataset.csv`
+5. `legal_dataset.csv`
+
+### **📈 Dataset Splits**
+- **Tự động tạo** nếu chưa có
+- **Train/Val/Test**: 70/15/15 ratio
+- **Stratified sampling** theo Level 1 labels
+
+## 🎯 **Kết Quả Mong Đợi**
+
+### **📈 Dataset Processing**
+- **Auto-detection**: Tự động tìm và load dataset
+- **Validation**: Kiểm tra columns cần thiết
+- **Splits**: Tự động tạo training splits
 
 ### **🏆 Performance Metrics**
 - **SVM**: Accuracy ~75-85%
@@ -148,28 +169,18 @@ results/
 └── evaluation_results/
     └── complete_evaluation_results.pkl
 data/
-├── processed/
-│   ├── hierarchical_legal_dataset.csv
-│   └── dataset_splits/
-│       ├── train.csv
-│       ├── validation.csv
-│       └── test.csv
+└── processed/
+    └── dataset_splits/
+        ├── train.csv
+        ├── validation.csv
+        └── test.csv
 ```
 
 ## 🔧 **Tùy Chỉnh Pipeline**
 
-### **Dataset Size**
-```python
-# Trong complete_pipeline_colab.py
-self.config = {
-    'dataset_size': 5000,  # Thay đổi số lượng samples
-    # ...
-}
-```
-
 ### **Models Training**
 ```python
-# Chọn models để training
+# Trong complete_pipeline_colab.py
 self.config = {
     'train_models': ['svm', 'phobert'],  # Chỉ training SVM và PhoBERT
     # ...
@@ -185,10 +196,20 @@ self.config = {
 }
 ```
 
+### **Dataset Paths**
+```python
+# Thêm đường dẫn dataset mới
+possible_paths = [
+    "your_custom_dataset.csv",
+    "data/your_dataset.csv",
+    # ...
+]
+```
+
 ## 🎯 **Use Cases**
 
 ### **1. 🏛️ Cơ Quan Nhà Nước**
-- Phân loại văn bản pháp luật
+- Phân loại văn bản pháp luật có sẵn
 - Tự động routing documents
 - Compliance checking
 
@@ -236,13 +257,20 @@ from flask import Flask, request, jsonify
 
 ## 🔍 **Troubleshooting**
 
+### **Lỗi "Dataset Not Found"**
+```python
+# Kiểm tra tên file dataset
+# Đảm bảo có columns: text, type_level1, domain_level2
+# Kiểm tra encoding UTF-8
+```
+
 ### **Lỗi Memory**
 ```python
-# Giảm dataset size
-'dataset_size': 5000
-
 # Giảm batch size trong PhoBERT
 'batch_size': 4
+
+# Giảm max_features trong BiLSTM
+'max_features': 3000
 ```
 
 ### **Lỗi CUDA**
@@ -254,20 +282,14 @@ from flask import Flask, request, jsonify
 ### **Lỗi Import**
 ```python
 # Đảm bảo chạy install_dependencies() trước
-# Kiểm tra file JSON đã upload
-```
-
-### **Lỗi Training**
-```python
-# Kiểm tra dataset đã được tạo
-# Xem logs để debug
+# Kiểm tra dataset đã upload
 ```
 
 ## 📞 **Hỗ Trợ & Liên Hệ**
 
 ### **🔧 Technical Issues**
-1. Kiểm tra dependencies đã được cài đặt
-2. Đảm bảo file JSON đã upload
+1. Kiểm tra dataset có đúng format không
+2. Đảm bảo columns cần thiết đã có
 3. Kiểm tra runtime type (GPU/CPU)
 4. Xem logs và error messages
 
@@ -282,21 +304,31 @@ from flask import Flask, request, jsonify
 - Backup models sau khi training thành công
 - Monitor training progress
 
+## 🎉 **Lợi Ích Mới (Dataset Có Sẵn)**
+
+- 🚀 **Nhanh chóng**: Không cần tạo dataset từ JSON
+- 📊 **Linh hoạt**: Sử dụng dataset có sẵn
+- 🔍 **Tự động**: Tự động tìm và validate dataset
+- 💾 **Tiết kiệm**: Không cần xử lý dữ liệu gốc
+- 📈 **Hiệu quả**: Tập trung vào training models
+- 🌍 **Tiếng Việt**: Tối ưu cho văn bản pháp luật
+
 ## 🎉 **Kết Luận**
 
-viLegalBert pipeline cho Google Colab cung cấp:
+viLegalBert pipeline cho Google Colab (Dataset Có Sẵn) cung cấp:
 
 - 🚀 **Dễ sử dụng**: Copy & paste, chạy trực tiếp
-- 📊 **Hoàn chỉnh**: Từ dataset đến ensemble
+- 📊 **Hoàn chỉnh**: Từ dataset loading đến ensemble
 - 🔧 **Linh hoạt**: Dễ dàng tùy chỉnh và mở rộng
 - 💾 **Tự động**: Lưu trữ và quản lý models
 - 📈 **Hiệu quả**: Kết hợp nhiều approaches
-- 🌍 **Tiếng Việt**: Tối ưu cho văn bản pháp luật Việt Nam
+- 🌍 **Tiếng Việt**: Tối ưu cho văn bản pháp luật
+- 🔍 **Thông minh**: Tự động tìm và validate dataset
 
 ---
 
-**🚀 Chúc bạn thành công với viLegalBert trên Google Colab!**
+**🚀 viLegalBert Pipeline (Dataset Có Sẵn) đã sẵn sàng cho Google Colab!**
 
 **📧 Hỗ trợ**: Kiểm tra logs và documentation  
-**🔗 Repository**: Tất cả files đã sẵn sàng để sử dụng  
-**📅 Version**: 1.0 - Complete Pipeline 
+**🔗 Repository**: Tất cả files đã được tối ưu  
+**📅 Version**: 2.0 - Dataset Ready Pipeline 

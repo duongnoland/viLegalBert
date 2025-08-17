@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🚀 Complete Pipeline viLegalBert cho Google Colab
+🚀 Complete Pipeline viLegalBert cho Google Colab (Dataset Có Sẵn)
 Tích hợp SVM, PhoBERT, BiLSTM và Ensemble
 """
 
@@ -40,6 +40,7 @@ def install_dependencies():
 # Import sau khi cài đặt
 from sklearn.metrics import accuracy_score, classification_report
 import torch
+from sklearn.model_selection import train_test_split
 
 class CompletePipeline:
     """Pipeline hoàn chỉnh cho viLegalBert"""
@@ -51,7 +52,6 @@ class CompletePipeline:
         
         # Cấu hình pipeline
         self.config = {
-            'dataset_size': 10000,
             'train_models': ['svm', 'phobert', 'bilstm'],
             'create_ensemble': True,
             'evaluate_all': True
@@ -65,9 +65,6 @@ class CompletePipeline:
         print("🏗️ Tạo cấu trúc project...")
         
         directories = [
-            'data/raw',
-            'data/processed',
-            'data/processed/dataset_splits',
             'models/saved_models/level1_classifier/svm_level1',
             'models/saved_models/level2_classifier/svm_level2',
             'models/saved_models/level1_classifier/phobert_level1',
@@ -84,34 +81,77 @@ class CompletePipeline:
             Path(directory).mkdir(parents=True, exist_ok=True)
             print(f"✅ Tạo thư mục: {directory}")
     
-    def create_dataset(self, json_file: str):
-        """Tạo dataset từ JSON"""
-        print("📊 Tạo dataset...")
+    def check_dataset_availability(self):
+        """Kiểm tra dataset có sẵn"""
+        print("🔍 Kiểm tra dataset có sẵn...")
         
-        try:
-            # Import dataset creation function
-            from main_colab import create_hierarchical_dataset, create_training_splits
+        possible_paths = [
+            "data/processed/hierarchical_legal_dataset.csv",
+            "hierarchical_legal_dataset.csv",
+            "data/hierarchical_legal_dataset.csv",
+            "dataset.csv",
+            "legal_dataset.csv"
+        ]
+        
+        for path in possible_paths:
+            if Path(path).exists():
+                print(f"✅ Tìm thấy dataset: {path}")
+                return path
+        
+        print("❌ Không tìm thấy dataset nào")
+        return None
+    
+    def check_dataset_splits(self):
+        """Kiểm tra dataset splits có sẵn"""
+        print("🔍 Kiểm tra dataset splits...")
+        
+        splits_dir = "data/processed/dataset_splits"
+        train_path = Path(splits_dir) / "train.csv"
+        val_path = Path(splits_dir) / "validation.csv"
+        test_path = Path(splits_dir) / "test.csv"
+        
+        if train_path.exists() and val_path.exists() and test_path.exists():
+            print("✅ Dataset splits đã có sẵn")
             
-            # Tạo dataset
-            output_csv = "data/processed/hierarchical_legal_dataset.csv"
-            df = create_hierarchical_dataset(json_file, output_csv, self.config['dataset_size'])
+            # Load và hiển thị thông tin splits
+            train_df = pd.read_csv(train_path, encoding='utf-8')
+            val_df = pd.read_csv(val_path, encoding='utf-8')
+            test_df = pd.read_csv(test_path, encoding='utf-8')
             
-            if df is None:
-                print("❌ Không thể tạo dataset")
-                return False
+            print(f"📊 Train set: {len(train_df)} samples")
+            print(f"📊 Validation set: {len(val_df)} samples")
+            print(f"📊 Test set: {len(test_df)} samples")
             
-            # Tạo splits
-            splits_dir = "data/processed/dataset_splits"
-            create_training_splits(output_csv, splits_dir)
-            
-            print("✅ Dataset đã được tạo thành công")
             return True
-            
-        except Exception as e:
-            print(f"❌ Lỗi khi tạo dataset: {e}")
+        else:
+            print("⚠️ Dataset splits chưa có, sẽ tạo mới...")
             return False
     
-    def train_svm(self):
+    def create_training_splits_from_existing(self, dataset_path: str, splits_dir: str):
+        """Tạo training splits từ dataset có sẵn"""
+        print("🔄 Tạo training splits từ dataset có sẵn...")
+        
+        # Load dataset
+        df = pd.read_csv(dataset_path, encoding='utf-8')
+        
+        # Chia dữ liệu
+        train_df, temp_df = train_test_split(df, test_size=0.3, random_state=42, stratify=df['type_level1'])
+        val_df, test_df = train_test_split(temp_df, test_size=0.5, random_state=42, stratify=temp_df['type_level1'])
+        
+        # Lưu các tập
+        train_path = Path(splits_dir) / "train.csv"
+        val_path = Path(splits_dir) / "validation.csv"
+        test_path = Path(splits_dir) / "test.csv"
+        
+        train_df.to_csv(train_path, index=False, encoding='utf-8')
+        val_df.to_csv(val_path, index=False, encoding='utf-8')
+        test_df.to_csv(test_path, index=False, encoding='utf-8')
+        
+        print(f"✅ Train set: {len(train_df)} samples -> {train_path}")
+        print(f"✅ Validation set: {len(val_df)} samples -> {val_path}")
+        print(f"✅ Test set: {len(test_df)} samples -> {test_path}")
+    
+    def train_svm(self, dataset_path: str):
         """Training SVM models"""
         print("🏋️ Training SVM models...")
         
@@ -122,10 +162,10 @@ class CompletePipeline:
             trainer = SVMTrainer()
             
             # Training Level 1
-            results_level1 = trainer.train_level1("data/processed/hierarchical_legal_dataset.csv")
+            results_level1 = trainer.train_level1(dataset_path)
             
             # Training Level 2
-            results_level2 = trainer.train_level2("data/processed/hierarchical_legal_dataset.csv")
+            results_level2 = trainer.train_level2(dataset_path)
             
             self.results['svm'] = {
                 'level1': results_level1,
@@ -139,7 +179,7 @@ class CompletePipeline:
             print(f"❌ Lỗi khi training SVM: {e}")
             return False
     
-    def train_phobert(self):
+    def train_phobert(self, dataset_path: str):
         """Training PhoBERT models"""
         print("🏋️ Training PhoBERT models...")
         
@@ -150,10 +190,10 @@ class CompletePipeline:
             trainer = PhoBERTTrainer()
             
             # Training Level 1
-            results_level1 = trainer.train_level1("data/processed/hierarchical_legal_dataset.csv")
+            results_level1 = trainer.train_level1(dataset_path)
             
             # Training Level 2
-            results_level2 = trainer.train_level2("data/processed/hierarchical_legal_dataset.csv")
+            results_level2 = trainer.train_level2(dataset_path)
             
             self.results['phobert'] = {
                 'level1': results_level1,
@@ -167,7 +207,7 @@ class CompletePipeline:
             print(f"❌ Lỗi khi training PhoBERT: {e}")
             return False
     
-    def train_bilstm(self):
+    def train_bilstm(self, dataset_path: str):
         """Training BiLSTM models"""
         print("🏋️ Training BiLSTM models...")
         
@@ -178,10 +218,10 @@ class CompletePipeline:
             trainer = BiLSTMTrainer()
             
             # Training Level 1
-            results_level1 = trainer.train_level1("data/processed/hierarchical_legal_dataset.csv")
+            results_level1 = trainer.train_level1(dataset_path)
             
             # Training Level 2
-            results_level2 = trainer.train_level2("data/processed/hierarchical_legal_dataset.csv")
+            results_level2 = trainer.train_level2(dataset_path)
             
             self.results['bilstm'] = {
                 'level1': results_level1,
@@ -323,9 +363,10 @@ class CompletePipeline:
         
         return report
     
-    def run_pipeline(self, json_file: str):
+    def run_pipeline(self):
         """Chạy toàn bộ pipeline"""
         print("🚀 KHỞI ĐỘNG COMPLETE PIPELINE!")
+        print("📊 SỬ DỤNG DATASET CÓ SẴN")
         print("=" * 80)
         
         # Bước 1: Cài đặt dependencies
@@ -334,38 +375,54 @@ class CompletePipeline:
         # Bước 2: Tạo cấu trúc project
         self.create_project_structure()
         
-        # Bước 3: Tạo dataset
-        if not self.create_dataset(json_file):
-            print("❌ Pipeline dừng do lỗi tạo dataset")
+        # Bước 3: Kiểm tra dataset có sẵn
+        print("\n📊 BƯỚC 1: KIỂM TRA DATASET CÓ SẴN")
+        print("-" * 50)
+        
+        dataset_path = self.check_dataset_availability()
+        if dataset_path is None:
+            print("❌ Pipeline dừng do không tìm thấy dataset")
             return False
         
-        # Bước 4: Training các models
+        # Bước 4: Kiểm tra và tạo dataset splits
+        print("\n🔄 BƯỚC 2: KIỂM TRA DATASET SPLITS")
+        print("-" * 50)
+        
+        if not self.check_dataset_splits():
+            # Tạo splits mới từ dataset có sẵn
+            splits_dir = "data/processed/dataset_splits"
+            self.create_training_splits_from_existing(dataset_path, splits_dir)
+        
+        # Bước 5: Training các models
+        print("\n🏋️ BƯỚC 3: TRAINING MODELS")
+        print("-" * 50)
+        
         training_success = True
         
         if 'svm' in self.config['train_models']:
-            if not self.train_svm():
+            if not self.train_svm(dataset_path):
                 training_success = False
         
         if 'phobert' in self.config['train_models']:
-            if not self.train_phobert():
+            if not self.train_phobert(dataset_path):
                 training_success = False
         
         if 'bilstm' in self.config['train_models']:
-            if not self.train_bilstm():
+            if not self.train_bilstm(dataset_path):
                 training_success = False
         
         if not training_success:
             print("⚠️ Một số models training thất bại")
         
-        # Bước 5: Tạo ensemble
+        # Bước 6: Tạo ensemble
         if self.config['create_ensemble'] and training_success:
             self.create_ensemble()
         
-        # Bước 6: Đánh giá tất cả
+        # Bước 7: Đánh giá tất cả
         if self.config['evaluate_all']:
             self.evaluate_all_models()
         
-        # Bước 7: Tạo báo cáo
+        # Bước 8: Tạo báo cáo
         self.generate_summary_report()
         
         print("\n🎉 COMPLETE PIPELINE HOÀN THÀNH!")
@@ -376,20 +433,12 @@ class CompletePipeline:
 def main():
     """Hàm chính"""
     print("🚀 VILEGALBERT COMPLETE PIPELINE CHO GOOGLE COLAB!")
+    print("📊 SỬ DỤNG DATASET CÓ SẴN")
     print("=" * 80)
-    
-    # Tìm file JSON
-    json_files = list(Path('.').glob('*.json'))
-    if json_files:
-        json_file = str(json_files[0])
-        print(f"🔍 Tìm thấy file JSON: {json_file}")
-    else:
-        print("⚠️ Không tìm thấy file JSON. Vui lòng upload file vbpl_crawl.json vào Colab")
-        return
     
     # Khởi tạo và chạy pipeline
     pipeline = CompletePipeline()
-    success = pipeline.run_pipeline(json_file)
+    success = pipeline.run_pipeline()
     
     if success:
         print("\n🎉 PIPELINE HOÀN THÀNH THÀNH CÔNG!")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🚀 viLegalBert - Main Pipeline cho Google Colab
+🚀 viLegalBert - Main Pipeline cho Google Colab (Dataset Có Sẵn)
 Phân loại văn bản pháp luật Việt Nam với kiến trúc phân cấp 2 tầng
 """
 
@@ -76,9 +76,6 @@ import joblib
 def create_project_structure():
     """Tạo cấu trúc thư mục cho project"""
     directories = [
-        'data/raw',
-        'data/processed',
-        'data/processed/dataset_splits',
         'models/saved_models/level1_classifier/svm_level1',
         'models/saved_models/level2_classifier/svm_level2',
         'models/saved_models/level1_classifier/phobert_level1',
@@ -96,164 +93,103 @@ def create_project_structure():
         print(f"✅ Tạo thư mục: {directory}")
 
 # ============================================================================
-# 📊 DATASET CREATION
+# 📊 DATASET LOADING (Có Sẵn)
 # ============================================================================
 
-def create_hierarchical_dataset(json_file: str, output_csv: str, target_size: int = 10000) -> pd.DataFrame:
-    """Tạo dataset phân cấp 2 tầng từ JSON gốc"""
-    print("🔍 Đang load file JSON...")
+def load_existing_dataset(dataset_path: str = "data/processed/hierarchical_legal_dataset.csv"):
+    """Load dataset có sẵn"""
+    print("📊 Loading dataset có sẵn...")
     
     try:
-        with open(json_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        print(f"✅ Load thành công {len(data)} items từ {json_file}")
-    except Exception as e:
-        print(f"❌ Lỗi khi load JSON: {e}")
-        return None
-    
-    # Lấy mẫu ngẫu nhiên
-    if len(data) > target_size:
-        data = np.random.choice(data, target_size, replace=False).tolist()
-        print(f"📊 Đã lấy mẫu {target_size} items")
-    
-    # Xử lý từng item
-    processed_data = []
-    
-    for item in data:
-        try:
-            # Trích xuất thông tin cơ bản
-            doc_id = item.get('id', 'unknown')
-            ministry = item.get('ministry', 'unknown')
-            doc_type = item.get('type', 'unknown')
-            name = item.get('name', '')
-            chapter_name = item.get('chapter_name', '')
-            article = item.get('article', '')
-            content = item.get('content', '')
+        # Kiểm tra file dataset
+        if not Path(dataset_path).exists():
+            print(f"❌ Không tìm thấy dataset: {dataset_path}")
+            print("🔍 Tìm kiếm dataset trong các thư mục...")
             
-            # Làm sạch text
-            text = f"{name} {chapter_name} {article} {content}".strip()
-            text = ' '.join(text.split())  # Loại bỏ khoảng trắng thừa
+            # Tìm kiếm dataset trong các thư mục khác
+            possible_paths = [
+                "hierarchical_legal_dataset.csv",
+                "data/hierarchical_legal_dataset.csv",
+                "dataset.csv",
+                "legal_dataset.csv"
+            ]
             
-            # Phân loại Level 1 (Loại văn bản)
-            type_level1 = extract_document_type(doc_type, name)
-            
-            # Phân loại Level 2 (Domain pháp lý)
-            domain_level2 = extract_legal_domain(content, name, chapter_name)
-            
-            # Tính độ dài nội dung
-            content_length = len(content) if content else 0
-            
-            processed_data.append({
-                'id': doc_id,
-                'text': text,
-                'type_level1': type_level1,
-                'domain_level2': domain_level2,
-                'ministry': ministry,
-                'name': name,
-                'chapter': chapter_name,
-                'article': article,
-                'content_length': content_length
-            })
-            
-        except Exception as e:
-            print(f"⚠️ Lỗi khi xử lý item {item.get('id', 'unknown')}: {e}")
-            continue
-    
-    # Tạo DataFrame
-    df = pd.DataFrame(processed_data)
-    
-    # Lưu dataset
-    df.to_csv(output_csv, index=False, encoding='utf-8')
-    print(f"✅ Đã lưu dataset vào: {output_csv}")
-    
-    # Hiển thị thống kê
-    print(f"\n📈 THỐNG KÊ DATASET:")
-    print(f"Tổng số samples: {len(df)}")
-    
-    print(f"\n🏷️ PHÂN LOẠI TẦNG 1 (Loại văn bản):")
-    level1_counts = df['type_level1'].value_counts()
-    for doc_type, count in level1_counts.items():
-        print(f"  - {doc_type}: {count}")
-    
-    print(f"\n🏷️ PHÂN LOẠI TẦNG 2 (Domain pháp lý):")
-    level2_counts = df['domain_level2'].value_counts()
-    for domain, count in level2_counts.items():
-        print(f"  - {domain}: {count}")
-    
-    return df
-
-def extract_document_type(doc_type: str, name: str) -> str:
-    """Trích xuất loại văn bản từ type và name"""
-    if not doc_type and not name:
-        return "KHÁC"
-    
-    text = f"{doc_type} {name}".upper()
-    
-    if any(keyword in text for keyword in ["LUẬT", "LAW"]):
-        return "LUẬT"
-    elif any(keyword in text for keyword in ["NGHỊ ĐỊNH", "DECREE"]):
-        return "NGHỊ ĐỊNH"
-    elif any(keyword in text for keyword in ["THÔNG TƯ", "CIRCULAR"]):
-        return "THÔNG TƯ"
-    elif any(keyword in text for keyword in ["QUYẾT ĐỊNH", "DECISION"]):
-        return "QUYẾT ĐỊNH"
-    elif any(keyword in text for keyword in ["NGHỊ QUYẾT", "RESOLUTION"]):
-        return "NGHỊ QUYẾT"
-    elif any(keyword in text for keyword in ["PHÁP LỆNH", "ORDINANCE"]):
-        return "PHÁP LỆNH"
-    else:
-        return "KHÁC"
-
-def extract_legal_domain(content: str, name: str, chapter_name: str) -> str:
-    """Trích xuất domain pháp lý từ nội dung"""
-    if not content:
-        return "KHÁC"
-    
-    # Kết hợp nội dung để phân tích
-    full_text = f"{name} {chapter_name} {content}".upper()
-    
-    # Mapping các domain pháp lý với từ khóa tiếng Việt
-    domain_keywords = {
-        "HÌNH SỰ": ["hình sự", "tội phạm", "xử lý vi phạm", "phạt tù", "cải tạo"],
-        "DÂN SỰ": ["dân sự", "hợp đồng", "quyền sở hữu", "thừa kế", "hôn nhân gia đình"],
-        "HÀNH CHÍNH": ["hành chính", "xử phạt vi phạm", "thủ tục hành chính", "quyết định hành chính"],
-        "LAO ĐỘNG": ["lao động", "hợp đồng lao động", "tiền lương", "bảo hiểm xã hội"],
-        "THUẾ": ["thuế", "thuế thu nhập", "thuế giá trị gia tăng", "khai thuế", "nộp thuế"],
-        "DOANH NGHIỆP": ["doanh nghiệp", "công ty", "thành lập doanh nghiệp", "quản lý doanh nghiệp"],
-        "ĐẤT ĐAI": ["đất đai", "quyền sử dụng đất", "thủ tục đất đai", "bồi thường đất đai"],
-        "XÂY DỰNG": ["xây dựng", "giấy phép xây dựng", "quy hoạch", "kiến trúc", "thiết kế"],
-        "GIAO THÔNG": ["giao thông", "luật giao thông", "vi phạm giao thông", "phương tiện giao thông"],
-        "Y TẾ": ["y tế", "khám chữa bệnh", "dược phẩm", "vệ sinh an toàn thực phẩm"],
-        "GIÁO DỤC": ["giáo dục", "đào tạo", "chương trình giáo dục", "bằng cấp", "chứng chỉ"],
-        "TÀI CHÍNH": ["tài chính", "ngân hàng", "tín dụng", "tiền tệ", "đầu tư"],
-        "MÔI TRƯỜNG": ["môi trường", "bảo vệ môi trường", "ô nhiễm", "xử lý chất thải"],
-        "AN NINH": ["an ninh", "quốc phòng", "bảo vệ an ninh", "trật tự an toàn xã hội"]
-    }
-    
-    # Đếm số từ khóa xuất hiện cho mỗi domain
-    domain_scores = {}
-    for domain, keywords in domain_keywords.items():
-        score = 0
-        for keyword in keywords:
-            if keyword.upper() in full_text:
-                score += 1
+            for path in possible_paths:
+                if Path(path).exists():
+                    dataset_path = path
+                    print(f"✅ Tìm thấy dataset: {dataset_path}")
+                    break
+            else:
+                print("❌ Không tìm thấy dataset nào. Vui lòng upload dataset vào Colab")
+                return None
         
-        if score > 0:
-            domain_scores[domain] = score
-    
-    # Trả về domain có điểm cao nhất
-    if domain_scores:
-        best_domain = max(domain_scores, key=domain_scores.get)
-        return best_domain
-    
-    return "KHÁC"
+        # Load dataset
+        df = pd.read_csv(dataset_path, encoding='utf-8')
+        print(f"✅ Đã load dataset: {len(df)} samples")
+        
+        # Hiển thị thông tin dataset
+        print(f"\n📈 THÔNG TIN DATASET:")
+        print(f"Shape: {df.shape}")
+        print(f"Columns: {list(df.columns)}")
+        
+        # Kiểm tra columns cần thiết
+        required_columns = ['text', 'type_level1', 'domain_level2']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            print(f"❌ Thiếu columns: {missing_columns}")
+            print(f"📋 Columns có sẵn: {list(df.columns)}")
+            return None
+        
+        # Hiển thị thống kê
+        print(f"\n🏷️ PHÂN LOẠI TẦNG 1 (Loại văn bản):")
+        level1_counts = df['type_level1'].value_counts()
+        for doc_type, count in level1_counts.items():
+            print(f"  - {doc_type}: {count}")
+        
+        print(f"\n🏷️ PHÂN LOẠI TẦNG 2 (Domain pháp lý):")
+        level2_counts = df['domain_level2'].value_counts()
+        for domain, count in level2_counts.items():
+            print(f"  - {domain}: {count}")
+        
+        return df
+        
+    except Exception as e:
+        print(f"❌ Lỗi khi load dataset: {e}")
+        return None
 
-def create_training_splits(csv_path: str, splits_dir: str):
-    """Tạo các tập train/validation/test"""
-    print("🔄 Tạo các tập train/validation/test...")
+def check_dataset_splits():
+    """Kiểm tra dataset splits có sẵn"""
+    print("🔍 Kiểm tra dataset splits...")
+    
+    splits_dir = "data/processed/dataset_splits"
+    train_path = Path(splits_dir) / "train.csv"
+    val_path = Path(splits_dir) / "validation.csv"
+    test_path = Path(splits_dir) / "test.csv"
+    
+    if train_path.exists() and val_path.exists() and test_path.exists():
+        print("✅ Dataset splits đã có sẵn")
+        
+        # Load và hiển thị thông tin splits
+        train_df = pd.read_csv(train_path, encoding='utf-8')
+        val_df = pd.read_csv(val_path, encoding='utf-8')
+        test_df = pd.read_csv(test_path, encoding='utf-8')
+        
+        print(f"📊 Train set: {len(train_df)} samples")
+        print(f"📊 Validation set: {len(val_df)} samples")
+        print(f"📊 Test set: {len(test_df)} samples")
+        
+        return True
+    else:
+        print("⚠️ Dataset splits chưa có, sẽ tạo mới...")
+        return False
+
+def create_training_splits_from_existing(dataset_path: str, splits_dir: str):
+    """Tạo training splits từ dataset có sẵn"""
+    print("🔄 Tạo training splits từ dataset có sẵn...")
     
     # Load dataset
-    df = pd.read_csv(csv_path, encoding='utf-8')
+    df = pd.read_csv(dataset_path, encoding='utf-8')
     
     # Chia dữ liệu
     train_df, temp_df = train_test_split(df, test_size=0.3, random_state=42, stratify=df['type_level1'])
@@ -304,7 +240,7 @@ class SVMTrainer:
         self.vectorizers = {}
         self.feature_selectors = {}
     
-    def train_level1(self, data_path: str) -> Dict[str, Any]:
+    def train_level1(self, data_path: str):
         """Training cho Level 1 (Loại văn bản)"""
         print("🏷️ Training Level 1 (Loại văn bản)...")
         
@@ -383,7 +319,7 @@ class SVMTrainer:
             'classification_report': classification_report(y_val, y_pred, output_dict=True)
         }
     
-    def train_level2(self, data_path: str) -> Dict[str, Any]:
+    def train_level2(self, data_path: str):
         """Training cho Level 2 (Domain pháp lý)"""
         print("🏷️ Training Level 2 (Domain pháp lý)...")
         
@@ -549,50 +485,45 @@ def evaluate_svm_models(test_data_path: str):
 def main():
     """Hàm chính chạy pipeline"""
     print("🚀 KHỞI ĐỘNG VILEGALBERT PIPELINE CHO GOOGLE COLAB!")
+    print("📊 SỬ DỤNG DATASET CÓ SẴN")
     print("=" * 80)
     
-    # Tạo cấu trúc project
+    # Bước 1: Tạo cấu trúc project
     create_project_structure()
     
-    # Bước 1: Tạo dataset
-    print("\n📊 BƯỚC 1: TẠO DATASET")
+    # Bước 2: Load dataset có sẵn
+    print("\n📊 BƯỚC 1: LOAD DATASET CÓ SẴN")
     print("-" * 50)
     
-    # Kiểm tra xem có file JSON không
-    json_files = list(Path('.').glob('*.json'))
-    if json_files:
-        json_file = str(json_files[0])
-        print(f"🔍 Tìm thấy file JSON: {json_file}")
-    else:
-        print("⚠️ Không tìm thấy file JSON. Vui lòng upload file vbpl_crawl.json vào Colab")
-        return
-    
-    # Tạo dataset
-    output_csv = "data/processed/hierarchical_legal_dataset.csv"
-    df = create_hierarchical_dataset(json_file, output_csv, target_size=10000)
-    
+    df = load_existing_dataset()
     if df is None:
-        print("❌ Không thể tạo dataset")
+        print("❌ Không thể load dataset")
         return
     
-    # Tạo splits
-    splits_dir = "data/processed/dataset_splits"
-    create_training_splits(output_csv, splits_dir)
+    # Bước 3: Kiểm tra và tạo dataset splits
+    print("\n🔄 BƯỚC 2: KIỂM TRA DATASET SPLITS")
+    print("-" * 50)
     
-    # Bước 2: Training SVM
-    print("\n🏋️ BƯỚC 2: TRAINING SVM")
+    if not check_dataset_splits():
+        # Tạo splits mới từ dataset có sẵn
+        dataset_path = "data/processed/hierarchical_legal_dataset.csv"
+        splits_dir = "data/processed/dataset_splits"
+        create_training_splits_from_existing(dataset_path, splits_dir)
+    
+    # Bước 4: Training SVM
+    print("\n🏋️ BƯỚC 3: TRAINING SVM")
     print("-" * 50)
     
     trainer = SVMTrainer()
     
     # Training Level 1
-    results_level1 = trainer.train_level1(output_csv)
+    results_level1 = trainer.train_level1("data/processed/hierarchical_legal_dataset.csv")
     
     # Training Level 2
-    results_level2 = trainer.train_level2(output_csv)
+    results_level2 = trainer.train_level2("data/processed/hierarchical_legal_dataset.csv")
     
-    # Bước 3: Evaluation
-    print("\n📊 BƯỚC 3: EVALUATION")
+    # Bước 5: Evaluation
+    print("\n📊 BƯỚC 4: EVALUATION")
     print("-" * 50)
     
     test_data_path = "data/processed/dataset_splits/test.csv"
