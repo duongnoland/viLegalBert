@@ -80,11 +80,7 @@ data/embeddings/*.npy
 # ============================================================================
 # MODEL FILES
 # ============================================================================
-models/saved_models/**/*.pth
-models/saved_models/**/*.pkl
-models/saved_models/**/*.joblib
-models/checkpoints/**/*.pth
-models/checkpoints/**/*.pkl
+models/
 
 # ============================================================================
 # RESULTS
