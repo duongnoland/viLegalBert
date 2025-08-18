@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Sao lưu toàn bộ thư mục models/saved_models lên Google Drive.
+Sao lưu models và kết quả (results) lên Google Drive.
 
-Mặc định dùng:
-- Nguồn: /content/viLegalBert/models/saved_models (phù hợp Colab)
-- Đích:  /content/drive/MyDrive/viLegalBert/models/saved_models
+Mặc định (luôn thực hiện cả 2):
+- Models nguồn:  /content/viLegalBert/models/saved_models → Drive: /content/drive/MyDrive/viLegalBert/models/saved_models
+- Results nguồn: /content/viLegalBert/results            → Drive: /content/drive/MyDrive/viLegalBert/results
 
-Có thể thay đổi qua tham số dòng lệnh hoặc biến môi trường:
+Có thể thay đổi qua tham số dòng lệnh hoặc biến môi trường (xem --help):
 - GOOGLE_DRIVE_DIR: override thư mục gốc của Google Drive (vd: /content/drive/MyDrive)
 """
 
@@ -77,6 +77,21 @@ def parse_args() -> argparse.Namespace:
         help="Đường dẫn con trong Drive để lưu (mặc định: viLegalBert/models/saved_models)",
     )
     parser.add_argument(
+        "--results-source",
+        default=os.getenv("VILEGALBERT_RESULTS_DIR", "/content/viLegalBert/results"),
+        help="Thư mục nguồn chứa kết quả (mặc định: /content/viLegalBert/results)",
+    )
+    parser.add_argument(
+        "--results-target-subdir",
+        default="viLegalBert/results",
+        help="Đường dẫn con trong Drive để lưu kết quả (mặc định: viLegalBert/results)",
+    )
+    parser.add_argument(
+        "--skip-results",
+        action="store_true",
+        help="Bỏ qua sao lưu thư mục results (mặc định là sao lưu)",
+    )
+    parser.add_argument(
         "--no-overwrite",
         action="store_true",
         help="Không xóa trước nếu thư mục đích đã tồn tại",
@@ -105,8 +120,20 @@ def main() -> None:
         sys.exit(1)
 
     try:
+        # Sao lưu models
         copy_directory_tree(source_dir, target_dir, overwrite=(not args.no_overwrite))
-        print("✅ Sao lưu hoàn tất!")
+        print("✅ Sao lưu models hoàn tất!")
+
+        # Sao lưu results (mặc định luôn chạy, có thể bỏ qua bằng --skip-results)
+        if not args.skip_results:
+            results_source = os.path.abspath(args.results_source)
+            results_target = os.path.join(drive_root, args.results_target_subdir)
+            print("📁 Nguồn (results):", results_source)
+            print("🎯 Đích (results):", results_target)
+            copy_directory_tree(results_source, results_target, overwrite=(not args.no_overwrite))
+            print("✅ Sao lưu results hoàn tất!")
+
+        print("✅ Tất cả sao lưu đã hoàn tất!")
     except Exception as exc:
         print(f"❌ Sao lưu thất bại: {exc}")
         sys.exit(2)

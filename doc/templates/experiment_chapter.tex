@@ -1,0 +1,187 @@
+% Compile with: XeLaTeX
+\documentclass[12pt,a4paper]{article}
+
+% Fonts and language (XeLaTeX)
+\usepackage{fontspec}
+\usepackage{polyglossia}
+\setdefaultlanguage{vietnamese}
+\setmainfont{Times New Roman}
+
+% Layout and visuals
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{siunitx}
+\sisetup{round-mode=places,round-precision=4}
+
+\title{Chương X: Thực nghiệm}\date{}
+
+\begin{document}
+\maketitle
+
+\section{Mục tiêu thí nghiệm}
+\begin{itemize}
+  \item Bài toán phân loại hai tầng: (i) type\_level1; (ii) domain\_level2.
+  \item So sánh các mô hình: SVM (TF--IDF), BiLSTM (TF--IDF/Embedding), PhoBERT.
+  \item Thử nghiệm ablation: max\_length, num\_epochs, class\_weights.
+\end{itemize}
+
+\section{Dữ liệu}
+\subsection{Nguồn dữ liệu và tiền xử lý}
+Mô tả nguồn, quy trình làm sạch và tạo splits (train/validation/test). Tham chiếu thư mục: \texttt{/content/viLegalBert/data/processed/dataset\_splits}.
+
+\subsection{Thống kê dữ liệu}
+\begin{table}[H]
+  \centering
+  \caption{Phân bố lớp Level 1 trên tập train (top 20)}
+  \begin{tabular}{ll}
+    \toprule
+    Nhãn & Số mẫu \\
+    \midrule
+    % Điền từ results/report/stats_type_level1.csv
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \caption{Phân bố lớp Level 2 trên tập train (top 20)}
+  \begin{tabular}{ll}
+    \toprule
+    Nhãn & Số mẫu \\
+    \midrule
+    % Điền từ results/report/stats_domain_level2.csv
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\linewidth]{../../results/report/length_distribution_Train.png}
+  \caption{Phân bố độ dài văn bản (ký tự và token) trên tập train}
+\end{figure}
+
+\section{Mô hình}
+Tóm tắt kiến trúc và đặc trưng mỗi mô hình (SVM, BiLSTM, PhoBERT), số tham số xấp xỉ, ưu/nhược điểm.
+
+\section{Thiết lập thực nghiệm}
+\subsection{Môi trường}
+\begin{itemize}
+  \item Phần cứng: GPU/CPU, bộ nhớ.
+  \item Phần mềm: Python, PyTorch, Transformers (phiên bản).
+\end{itemize}
+
+\subsection{Siêu tham số}
+\begin{itemize}
+  \item PhoBERT: \texttt{max\_length=512}, \texttt{num\_epochs=20}, learning rate, batch size, \texttt{fp16}.
+  \item BiLSTM: hidden size, num layers, dropout, TF--IDF/Embedding.
+  \item SVM: vectorizer (n-gram, max\_features), kernel/regularization.
+\end{itemize}
+
+\section{Quy trình huấn luyện và đánh giá}
+\begin{itemize}
+  \item Huấn luyện riêng cho Level 1 và Level 2.
+  \item Thước đo: Accuracy, Macro--F1, Weighted--F1.
+\end{itemize}
+
+\section{Kết quả}
+\subsection{Kết quả chính}
+\begin{table}[H]
+  \centering
+  \caption{So sánh mô hình theo từng tầng}
+  \begin{tabular}{lllll}
+    \toprule
+    Mô hình & Tầng & Accuracy & Macro--F1 & Weighted--F1 \\
+    \midrule
+    % Điền từ results/report/main_results.csv
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Ma trận nhầm lẫn}
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../results/report/cm_svm_level1_type_level1.png}
+    \caption{SVM Level 1}
+  \end{subfigure}
+  \begin{subfigure}[b]{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../results/report/cm_svm_level2_domain_level2.png}
+    \caption{SVM Level 2}
+  \end{subfigure}
+  \begin{subfigure}[b]{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../results/report/cm_bilstm_level1.png}
+    \caption{BiLSTM Level 1}
+  \end{subfigure}
+  \begin{subfigure}[b]{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../results/report/cm_bilstm_level2.png}
+    \caption{BiLSTM Level 2}
+  \end{subfigure}
+  \begin{subfigure}[b]{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../results/report/cm_phobert_level1.png}
+    \caption{PhoBERT Level 1}
+  \end{subfigure}
+  \begin{subfigure}[b]{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../results/report/cm_phobert_level2.png}
+    \caption{PhoBERT Level 2}
+  \end{subfigure}
+  \caption{Ma trận nhầm lẫn cho từng mô hình/tầng}
+\end{figure}
+
+\subsection{Learning curves (PhoBERT)}
+\begin{figure}[H]
+  \centering
+  \begin{subfigure}[b]{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../results/report/learning_curves_PhoBERT_Level1.png}
+    \caption{PhoBERT Level 1}
+  \end{subfigure}
+  \begin{subfigure}[b]{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{../../results/report/learning_curves_PhoBERT_Level2.png}
+    \caption{PhoBERT Level 2}
+  \end{subfigure}
+  \caption{Learning curves}
+\end{figure}
+
+\section{Ablation}
+\begin{table}[H]
+  \centering
+  \caption{Ablation PhoBERT (Level 1)}
+  \begin{tabular}{llll}
+    \toprule
+    max\_length & num\_epochs & class\_weights & Ghi chú/Eval \\
+    \midrule
+    % Điền từ results/report/ablation_phobert_level1.csv
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Phân tích lỗi}
+Nêu các ví dụ tiêu biểu và mẫu lỗi theo lớp.
+
+\section{So sánh với công trình liên quan}
+Tổng hợp kết quả tốt nhất so với baseline/related works (nếu có).
+
+\section{Thời gian và tài nguyên}
+Thời gian huấn luyện, suy luận, kích thước mô hình.
+
+\section{Tái lập}
+Lệnh chạy, commit hash, phiên bản thư viện.
+
+\end{document}
+
+

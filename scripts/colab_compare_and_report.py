@@ -21,6 +21,7 @@ import os
 import json
 import pickle
 import warnings
+import argparse
 warnings.filterwarnings('ignore')
 
 import numpy as np
@@ -42,6 +43,13 @@ BASE_DIR = "/content/viLegalBert"
 RESULTS_DIR = os.path.join(BASE_DIR, "results", "report")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
+# Try to enable rich display if running in notebook/Colab
+try:
+    from IPython.display import display, HTML
+    IN_NOTEBOOK = True
+except Exception:
+    IN_NOTEBOOK = False
+
 
 # ==========================
 # Data loading & statistics
@@ -62,7 +70,7 @@ def data_stats_per_class(df: pd.DataFrame, label_col: str, title: str):
     return cnt
 
 
-def plot_length_distribution(df: pd.DataFrame, title: str):
+def plot_length_distribution(df: pd.DataFrame, title: str, show_inline: bool = False):
     texts = df['text'].fillna('')
     char_len = texts.apply(len)
     # Rough token length by whitespace split
@@ -73,6 +81,8 @@ def plot_length_distribution(df: pd.DataFrame, title: str):
     plt.tight_layout()
     out = os.path.join(RESULTS_DIR, f"length_distribution_{title}.png")
     plt.savefig(out, dpi=150)
+    if show_inline:
+        plt.show()
     plt.close()
     print(f"Saved: {out}")
 
@@ -80,7 +90,7 @@ def plot_length_distribution(df: pd.DataFrame, title: str):
 # ==========================
 # SVM baseline (TF-IDF)
 # ==========================
-def train_eval_svm(train_df, test_df, label_col: str, model_tag: str):
+def train_eval_svm(train_df, test_df, label_col: str, model_tag: str, show_inline: bool = False):
     vectorizer = TfidfVectorizer(max_features=50000, ngram_range=(1,2))
     X_train = vectorizer.fit_transform(train_df['text'].fillna(''))
     X_test = vectorizer.transform(test_df['text'].fillna(''))
@@ -96,13 +106,25 @@ def train_eval_svm(train_df, test_df, label_col: str, model_tag: str):
     f1_weighted = f1_score(y_test, y_pred, average='weighted')
 
     # Confusion matrix (limit to top-k labels by support for readability)
-    cm = confusion_matrix(y_test, y_pred, labels=np.unique(y_test))
+    labels_order = np.unique(y_test)
+    cm = confusion_matrix(y_test, y_pred, labels=labels_order)
     plt.figure(figsize=(10,8))
-    sns.heatmap(cm, cmap='Blues', cbar=False)
+    annot_on = len(labels_order) <= 30
+    sns.heatmap(
+        cm,
+        cmap='Blues', cbar=False,
+        annot=annot_on, fmt='d',
+        xticklabels=labels_order, yticklabels=labels_order
+    )
+    plt.xticks(rotation=90)
+    plt.yticks(rotation=0)
     plt.title(f"Confusion Matrix - SVM - {label_col}")
     plt.xlabel("Pred"); plt.ylabel("True")
     out = os.path.join(RESULTS_DIR, f"cm_svm_{model_tag}_{label_col}.png")
-    plt.tight_layout(); plt.savefig(out, dpi=150); plt.close(); print(f"Saved: {out}")
+    plt.tight_layout(); plt.savefig(out, dpi=150)
+    if show_inline:
+        plt.show()
+    plt.close(); print(f"Saved: {out}")
 
     return {
         'model': 'SVM',
@@ -116,13 +138,20 @@ def train_eval_svm(train_df, test_df, label_col: str, model_tag: str):
 # ==========================
 # Evaluate existing BiLSTM models
 # ==========================
-def eval_bilstm_level(level: int, test_df: pd.DataFrame):
-    # Lazy import to reuse repo logic
-    from evaluate_bilstm_colab import _load_artifacts, _rebuild_model_and_inputs
-    data = _load_artifacts(level)
+def eval_bilstm_level(level: int, test_df: pd.DataFrame, show_inline: bool = False):
+    # Import evaluate_bilstm_colab by path to avoid PYTHONPATH issues on Colab
+    import importlib.util
+    mod_path = os.path.join(BASE_DIR, 'evaluate_bilstm_colab.py')
+    spec = importlib.util.spec_from_file_location('evaluate_bilstm_colab', mod_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Cannot load module from {mod_path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    data = mod._load_artifacts(level)
     texts = test_df['text'].fillna('')
     y_true = test_df['type_level1'] if level == 1 else test_df['domain_level2']
-    model, X_t, lbl, device = _rebuild_model_and_inputs(data, texts)
+    model, X_t, lbl, device = mod._rebuild_model_and_inputs(data, texts)
     with torch.no_grad():
         logits = model(X_t)
         pred = torch.argmax(logits, dim=1).cpu().numpy()
@@ -132,13 +161,25 @@ def eval_bilstm_level(level: int, test_df: pd.DataFrame):
     f1_macro = f1_score(y_true, y_pred, average='macro')
     f1_weighted = f1_score(y_true, y_pred, average='weighted')
 
-    cm = confusion_matrix(y_true, y_pred, labels=np.unique(y_true))
+    labels_order = np.unique(y_true)
+    cm = confusion_matrix(y_true, y_pred, labels=labels_order)
     plt.figure(figsize=(10,8))
-    sns.heatmap(cm, cmap='Greens', cbar=False)
+    annot_on = len(labels_order) <= 30
+    sns.heatmap(
+        cm,
+        cmap='Greens', cbar=False,
+        annot=annot_on, fmt='d',
+        xticklabels=labels_order, yticklabels=labels_order
+    )
+    plt.xticks(rotation=90)
+    plt.yticks(rotation=0)
     plt.title(f"Confusion Matrix - BiLSTM - Level {level}")
     plt.xlabel("Pred"); plt.ylabel("True")
     out = os.path.join(RESULTS_DIR, f"cm_bilstm_level{level}.png")
-    plt.tight_layout(); plt.savefig(out, dpi=150); plt.close(); print(f"Saved: {out}")
+    plt.tight_layout(); plt.savefig(out, dpi=150)
+    if show_inline:
+        plt.show()
+    plt.close(); print(f"Saved: {out}")
 
     return acc, f1_macro, f1_weighted
 
@@ -161,7 +202,7 @@ def _load_phobert(level: int):
     return tokenizer, model, label_encoder, device
 
 
-def eval_phobert_level(level: int, test_df: pd.DataFrame):
+def eval_phobert_level(level: int, test_df: pd.DataFrame, show_inline: bool = False):
     tok, mdl, le, dev = _load_phobert(level)
     texts = test_df['text'].fillna('').tolist()
     y_true = test_df['type_level1'] if level == 1 else test_df['domain_level2']
@@ -176,13 +217,25 @@ def eval_phobert_level(level: int, test_df: pd.DataFrame):
     f1_macro = f1_score(y_true, y_pred, average='macro')
     f1_weighted = f1_score(y_true, y_pred, average='weighted')
 
-    cm = confusion_matrix(y_true, y_pred, labels=np.unique(y_true))
+    labels_order = np.unique(y_true)
+    cm = confusion_matrix(y_true, y_pred, labels=labels_order)
     plt.figure(figsize=(10,8))
-    sns.heatmap(cm, cmap='Reds', cbar=False)
+    annot_on = len(labels_order) <= 30
+    sns.heatmap(
+        cm,
+        cmap='Reds', cbar=False,
+        annot=annot_on, fmt='d',
+        xticklabels=labels_order, yticklabels=labels_order
+    )
+    plt.xticks(rotation=90)
+    plt.yticks(rotation=0)
     plt.title(f"Confusion Matrix - PhoBERT - Level {level}")
     plt.xlabel("Pred"); plt.ylabel("True")
     out = os.path.join(RESULTS_DIR, f"cm_phobert_level{level}.png")
-    plt.tight_layout(); plt.savefig(out, dpi=150); plt.close(); print(f"Saved: {out}")
+    plt.tight_layout(); plt.savefig(out, dpi=150)
+    if show_inline:
+        plt.show()
+    plt.close(); print(f"Saved: {out}")
 
     return acc, f1_macro, f1_weighted
 
@@ -242,7 +295,7 @@ def phobert_ablation(train_df, val_df, grid=None, level: int = 1):
 # ==========================
 # Learning curves (PhoBERT)
 # ==========================
-def plot_phobert_learning_curves(model_dir: str, tag: str):
+def plot_phobert_learning_curves(model_dir: str, tag: str, show_inline: bool = False):
     state_path = os.path.join(model_dir, 'trainer_state.json')
     if not os.path.exists(state_path):
         print(f"No trainer_state.json at {model_dir}")
@@ -259,13 +312,16 @@ def plot_phobert_learning_curves(model_dir: str, tag: str):
     plt.xlabel('step'); plt.ylabel('loss'); plt.title(f'Learning Curves - {tag}')
     plt.legend(); plt.tight_layout()
     out = os.path.join(RESULTS_DIR, f"learning_curves_{tag}.png")
-    plt.savefig(out, dpi=150); plt.close(); print(f"Saved: {out}")
+    plt.savefig(out, dpi=150)
+    if show_inline:
+        plt.show()
+    plt.close(); print(f"Saved: {out}")
 
 
 # ==========================
 # Embedding visualization (UMAP/TSNE)
 # ==========================
-def plot_embeddings_umap_tsne(df: pd.DataFrame, sample_size: int = 1000, tag: str = 'phobert'):
+def plot_embeddings_umap_tsne(df: pd.DataFrame, sample_size: int = 1000, tag: str = 'phobert', show_inline: bool = False):
     try:
         import umap
         has_umap = True
@@ -302,36 +358,53 @@ def plot_embeddings_umap_tsne(df: pd.DataFrame, sample_size: int = 1000, tag: st
     sns.scatterplot(x=Z[:,0], y=Z[:,1], hue=labels, s=12, palette='tab20', legend=False)
     plt.title(f"{method} embeddings - {tag}")
     out = os.path.join(RESULTS_DIR, f"embeddings_{tag}.png")
-    plt.tight_layout(); plt.savefig(out, dpi=150); plt.close(); print(f"Saved: {out}")
+    plt.tight_layout(); plt.savefig(out, dpi=150)
+    if show_inline:
+        plt.show()
+    plt.close(); print(f"Saved: {out}")
 
 
 # ==========================
 # Orchestrator
 # ==========================
 def main():
+    parser = argparse.ArgumentParser(description="Colab compare & report")
+    parser.add_argument("--show_ui", action="store_true", help="Hiển thị bảng/hình trực tiếp trong Colab")
+    parser.add_argument("--run_ablation", action="store_true", help="Chạy ablation nhỏ cho PhoBERT")
+    parser.add_argument("--embed_sample", type=int, default=1000, help="Số mẫu để vẽ UMAP/t-SNE")
+    args, _ = parser.parse_known_args()
+
+    show_inline = bool(args.show_ui and IN_NOTEBOOK)
+
     print("== Load dataset splits ==")
     train, val, test = load_splits()
 
     # Data stats
-    data_stats_per_class(train, 'type_level1', 'Train')
-    data_stats_per_class(train, 'domain_level2', 'Train')
-    plot_length_distribution(train, 'Train')
+    stats_l1 = data_stats_per_class(train, 'type_level1', 'Train')
+    stats_l2 = data_stats_per_class(train, 'domain_level2', 'Train')
+    plot_length_distribution(train, 'Train', show_inline=show_inline)
+    if show_inline:
+        try:
+            display(HTML("<h3>Thống kê lớp - Level 1</h3>")); display(stats_l1.head(20))
+            display(HTML("<h3>Thống kê lớp - Level 2</h3>")); display(stats_l2.head(20))
+        except Exception:
+            pass
 
     # SVM baselines
     print("\n== Train & Evaluate SVM ==")
     res = []
-    res.append(train_eval_svm(train, test, 'type_level1', 'level1'))
-    res.append(train_eval_svm(train, test, 'domain_level2', 'level2'))
+    res.append(train_eval_svm(train, test, 'type_level1', 'level1', show_inline=show_inline))
+    res.append(train_eval_svm(train, test, 'domain_level2', 'level2', show_inline=show_inline))
 
     # BiLSTM evaluation (requires saved models)
     print("\n== Evaluate BiLSTM (saved models) ==")
     try:
-        acc1, f1m1, f1w1 = eval_bilstm_level(1, test)
+        acc1, f1m1, f1w1 = eval_bilstm_level(1, test, show_inline=show_inline)
         res.append({'model': 'BiLSTM', 'label_col': 'type_level1', 'acc': acc1, 'macro_f1': f1m1, 'weighted_f1': f1w1})
     except Exception as e:
         print(f"BiLSTM Level 1 eval failed: {e}")
     try:
-        acc2, f1m2, f1w2 = eval_bilstm_level(2, test)
+        acc2, f1m2, f1w2 = eval_bilstm_level(2, test, show_inline=show_inline)
         res.append({'model': 'BiLSTM', 'label_col': 'domain_level2', 'acc': acc2, 'macro_f1': f1m2, 'weighted_f1': f1w2})
     except Exception as e:
         print(f"BiLSTM Level 2 eval failed: {e}")
@@ -339,12 +412,12 @@ def main():
     # PhoBERT evaluation (requires saved models)
     print("\n== Evaluate PhoBERT (saved models) ==")
     try:
-        acc1, f1m1, f1w1 = eval_phobert_level(1, test)
+        acc1, f1m1, f1w1 = eval_phobert_level(1, test, show_inline=show_inline)
         res.append({'model': 'PhoBERT', 'label_col': 'type_level1', 'acc': acc1, 'macro_f1': f1m1, 'weighted_f1': f1w1})
     except Exception as e:
         print(f"PhoBERT Level 1 eval failed: {e}")
     try:
-        acc2, f1m2, f1w2 = eval_phobert_level(2, test)
+        acc2, f1m2, f1w2 = eval_phobert_level(2, test, show_inline=show_inline)
         res.append({'model': 'PhoBERT', 'label_col': 'domain_level2', 'acc': acc2, 'macro_f1': f1m2, 'weighted_f1': f1w2})
     except Exception as e:
         print(f"PhoBERT Level 2 eval failed: {e}")
@@ -356,26 +429,37 @@ def main():
     print("\n== Main Results ==")
     print(res_df)
     print(f"Saved: {res_csv}")
+    if show_inline:
+        try:
+            display(HTML("<h3>Kết quả chính</h3>")); display(res_df)
+        except Exception:
+            pass
 
     # Learning curves for PhoBERT (if available)
     plot_phobert_learning_curves(
         os.path.join(BASE_DIR, 'models', 'saved_models', 'level1_classifier', 'phobert_level1', 'phobert_level1_model'),
-        tag='PhoBERT_Level1'
+        tag='PhoBERT_Level1', show_inline=show_inline
     )
     plot_phobert_learning_curves(
         os.path.join(BASE_DIR, 'models', 'saved_models', 'level2_classifier', 'phobert_level2', 'phobert_level2_model'),
-        tag='PhoBERT_Level2'
+        tag='PhoBERT_Level2', show_inline=show_inline
     )
 
     # Optional: embeddings visualization (sampled)
     try:
-        plot_embeddings_umap_tsne(test, sample_size=1000, tag='PhoBERT_test_level1')
+        plot_embeddings_umap_tsne(test, sample_size=int(args.embed_sample), tag='PhoBERT_test_level1', show_inline=show_inline)
     except Exception as e:
         print(f"Embedding plot skipped: {e}")
 
-    # Small ablation example (comment out if not needed)
-    # print("\n== PhoBERT Ablation (small grid) ==")
-    # _ = phobert_ablation(train, val, level=1)
+    # PhoBERT Ablation (optional)
+    if args.run_ablation:
+        print("\n== PhoBERT Ablation (small grid) ==")
+        ablt_df = phobert_ablation(train, val, level=1)
+        if show_inline:
+            try:
+                display(HTML("<h3>Ablation PhoBERT (Level 1)</h3>")); display(ablt_df)
+            except Exception:
+                pass
 
     print("\nAll done. Outputs saved to:", RESULTS_DIR)
 
