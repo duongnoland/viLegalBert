@@ -10,6 +10,11 @@ import pickle
 import pandas as pd
 import warnings
 warnings.filterwarnings('ignore')
+import sys
+
+# Ignore Jupyter/Colab injected arguments like: -f /path/to/kernel-XXXX.json
+if any(arg == '-f' or arg.endswith('.json') for arg in sys.argv[1:]):
+    sys.argv = [sys.argv[0]]
 
 # ============================================================================
 # 🚀 GPU SETUP & DEPENDENCIES
@@ -60,62 +65,174 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report
 import numpy as np
 
-class TextDataset(Dataset):
-    """Dataset cho text classification"""
+class FocalLoss(nn.Module):
+    """Focal Loss for multi-class classification with optional class weights."""
+    def __init__(self, gamma: float = 2.0, weight: torch.Tensor = None, reduction: str = 'mean'):
+        super(FocalLoss, self).__init__()
+        self.gamma = gamma
+        self.weight = weight
+        self.reduction = reduction
+
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        log_probs = torch.nn.functional.log_softmax(logits, dim=1)
+        probs = torch.exp(log_probs)
+        gather_logp = log_probs.gather(1, targets.view(-1, 1)).squeeze(1)
+        gather_p = probs.gather(1, targets.view(-1, 1)).squeeze(1)
+        focal_factor = (1 - gather_p) ** self.gamma
+        loss = -focal_factor * gather_logp
+        if self.weight is not None:
+            class_w = self.weight[targets]
+            loss = loss * class_w
+        if self.reduction == 'mean':
+            return loss.mean()
+        if self.reduction == 'sum':
+            return loss.sum()
+        return loss
+
+class DataUtils:
+    """Nhóm helper để giảm lặp lại code cho DataLoader, class weights, tokenizer"""
     
-    def __init__(self, texts, labels, vectorizer, max_length=1000):
-        self.texts = texts
-        self.labels = labels
-        self.vectorizer = vectorizer
-        self.max_length = max_length
+    @staticmethod
+    def create_tokenizer_and_sequences(texts_train, texts_val, max_features, max_length):
+        tokenizer = SimpleTokenizer(max_vocab_size=max_features)
+        tokenizer.fit(texts_train)
+        train_seq = tokenizer.texts_to_ids(texts_train, max_length)
+        val_seq = tokenizer.texts_to_ids(texts_val, max_length)
+        return tokenizer, train_seq, val_seq
+
+    @staticmethod
+    def create_balanced_train_loader(dataset, labels_train, batch_size, use_gpu):
+        from torch.utils.data import DataLoader
+        from torch.utils.data.sampler import WeightedRandomSampler
+        class_sample_count = np.array([sum(labels_train == t) for t in np.unique(labels_train)])
+        class_weights_np = 1.0 / np.clip(class_sample_count, 1, None)
+        samples_weight = np.array([class_weights_np[t] for t in labels_train])
+        samples_weight = torch.from_numpy(samples_weight).double()
+        sampler = WeightedRandomSampler(samples_weight, num_samples=len(samples_weight), replacement=True)
+        return DataLoader(dataset, batch_size=batch_size, sampler=sampler,
+                          pin_memory=True if use_gpu else False, num_workers=4 if use_gpu else 2)
+
+    @staticmethod
+    def create_val_loader(dataset, batch_size, use_gpu):
+        from torch.utils.data import DataLoader
+        return DataLoader(dataset, batch_size=batch_size, shuffle=False,
+                          pin_memory=True if use_gpu else False, num_workers=4 if use_gpu else 2)
+
+    @staticmethod
+    def compute_class_weights(labels_train, num_classes):
+        from collections import Counter
+        class_counts = Counter(labels_train)
+        weights = torch.ones(num_classes, dtype=torch.float32)
+        for cls_idx, cnt in class_counts.items():
+            weights[cls_idx] = 1.0 / max(cnt, 1)
+        weights = weights * (len(labels_train) / weights.sum())
+        return weights
+
+    @staticmethod
+    def build_artifacts_dict(model, tokenizer, label_encoder, config, use_gpu):
+        return {
+            'model_state_dict': model.state_dict(),
+            'tokenizer': tokenizer,
+            'tokenizer_state': {
+                'word_to_idx': tokenizer.word_to_idx,
+                'pad_token': tokenizer.pad_token,
+                'unk_token': tokenizer.unk_token,
+                'start_token': tokenizer.start_token,
+                'end_token': tokenizer.end_token,
+                'vocab_size': tokenizer.vocab_size,
+                'max_vocab_size': tokenizer.max_vocab_size
+            },
+            'label_encoder': label_encoder,
+            'config': config,
+            'gpu_optimized': use_gpu
+        }
+
+class SimpleTokenizer:
+    """Tokenizer đơn giản dùng cho BiLSTM-Embedding"""
+    
+    def __init__(self, max_vocab_size=20000, pad_token='<PAD>', unk_token='<UNK>', start_token='<START>', end_token='<END>'):
+        self.max_vocab_size = max_vocab_size
+        self.pad_token = pad_token
+        self.unk_token = unk_token
+        self.start_token = start_token
+        self.end_token = end_token
+        self.word_to_idx = {}
+        self.idx_to_word = {}
+        self.vocab_size = 0
+    
+    def _clean(self, text: str) -> str:
+        import re
+        text = str(text).lower()
+        text = re.sub(r'[^\w\s]', ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+    
+    def _tokenize(self, text: str):
+        return text.split()
+    
+    def fit(self, texts):
+        from collections import Counter
+        counter = Counter()
+        for t in texts:
+            toks = self._tokenize(self._clean(t))
+            counter.update(toks)
+        specials = [self.pad_token, self.unk_token, self.start_token, self.end_token]
+        self.word_to_idx = {tok: idx for idx, tok in enumerate(specials)}
+        self.idx_to_word = {idx: tok for idx, tok in enumerate(specials)}
+        limit = max(0, self.max_vocab_size - len(specials))
+        for i, (w, _) in enumerate(counter.most_common(limit)):
+            idx = len(specials) + i
+            self.word_to_idx[w] = idx
+            self.idx_to_word[idx] = w
+        self.vocab_size = len(self.word_to_idx)
+        return self
+    
+    def text_to_ids(self, text: str, max_length: int):
+        toks = self._tokenize(self._clean(text))
+        ids = [self.word_to_idx[self.start_token]]
+        for w in toks:
+            ids.append(self.word_to_idx.get(w, self.word_to_idx[self.unk_token]))
+        ids.append(self.word_to_idx[self.end_token])
+        if len(ids) > max_length:
+            ids = ids[:max_length]
+        if len(ids) < max_length:
+            ids.extend([self.word_to_idx[self.pad_token]] * (max_length - len(ids)))
+        return ids
+    
+    def texts_to_ids(self, texts, max_length: int):
+        return [self.text_to_ids(t, max_length) for t in texts]
+
+class TokenDataset(Dataset):
+    """Dataset cho token id sequences"""
+    
+    def __init__(self, sequences, labels):
+        self.sequences = torch.as_tensor(sequences, dtype=torch.long)
+        self.labels = torch.as_tensor(labels, dtype=torch.long)
     
     def __len__(self):
-        return len(self.texts)
+        return len(self.sequences)
     
     def __getitem__(self, idx):
-        text = self.texts[idx]
-        label = self.labels[idx]
-        
-        # Vectorize text
-        features = self.vectorizer.transform([text]).toarray()[0]
-        
-        # Truncate/pad to max_length
-        if len(features) > self.max_length:
-            features = features[:self.max_length]
-        else:
-            features = np.pad(features, (0, self.max_length - len(features)), 'constant')
-        
-        return torch.FloatTensor(features), torch.LongTensor([label])
+        return self.sequences[idx], self.labels[idx]
 
-class BiLSTMClassifier(nn.Module):
-    """BiLSTM model cho text classification"""
+class BiLSTMTokenClassifier(nn.Module):
+    """BiLSTM với Embedding cho phân loại văn bản"""
     
-    def __init__(self, input_size, hidden_size, num_layers, num_classes, dropout=0.5):
-        super(BiLSTMClassifier, self).__init__()
-        
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        
-        # BiLSTM layer
+    def __init__(self, vocab_size, embedding_dim, hidden_size, num_layers, num_classes, dropout=0.5):
+        super(BiLSTMTokenClassifier, self).__init__()
+        self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
         self.lstm = nn.LSTM(
-            input_size=input_size, hidden_size=hidden_size, num_layers=num_layers,
+            input_size=embedding_dim, hidden_size=hidden_size, num_layers=num_layers,
             batch_first=True, bidirectional=True, dropout=dropout if num_layers > 1 else 0
         )
-        
-        # Attention mechanism
         self.attention = nn.Sequential(
             nn.Linear(hidden_size * 2, hidden_size),
             nn.Tanh(),
             nn.Linear(hidden_size, 1)
         )
-        
-        # Classification head
         self.classifier = nn.Sequential(
             nn.Dropout(dropout),
             nn.Linear(hidden_size * 2, hidden_size),
@@ -125,21 +242,11 @@ class BiLSTMClassifier(nn.Module):
         )
     
     def forward(self, x):
-        batch_size = x.size(0)
-        
-        # LSTM forward pass
-        lstm_out, _ = self.lstm(x)
-        
-        # Attention mechanism
-        attention_weights = self.attention(lstm_out)
-        attention_weights = torch.softmax(attention_weights, dim=1)
-        
-        # Apply attention
-        attended_output = torch.sum(attention_weights * lstm_out, dim=1)
-        
-        # Classification
-        output = self.classifier(attended_output)
-        return output
+        emb = self.embedding(x)
+        out, _ = self.lstm(emb)
+        w = torch.softmax(self.attention(out), dim=1)
+        attended = torch.sum(w * out, dim=1)
+        return self.classifier(attended)
 
 class BiLSTMTrainer:
     """Trainer cho mô hình BiLSTM với GPU optimization"""
@@ -150,36 +257,46 @@ class BiLSTMTrainer:
         self.device = torch.device("cuda" if self.use_gpu else "cpu")
         print(f"🚀 Sử dụng device: {self.device}")
         
-        # Cấu hình training tối ưu cho GPU/CPU
+        # Cấu hình training (token IDs + embedding)
         if self.use_gpu:
             self.config = {
-                'max_features': 8000,
-                'max_length': 1000,
+                'max_features': 30000,
+                'max_length': 512,
+                'embedding_dim': 300,
                 'hidden_size': 256,
-                'num_layers': 3,
-                'dropout': 0.5,
+                'num_layers': 2,
+                'dropout': 0.3,
                 'learning_rate': 0.001,
-                'num_epochs': 15,
+                'num_epochs': 16,
                 'batch_size': 64,
-                'early_stopping_patience': 7,
+                'early_stopping_patience': 6,
                 'gradient_clip': 1.0,
                 'scheduler_patience': 3,
-                'scheduler_factor': 0.5
+                'scheduler_factor': 0.5,
+                'use_focal_loss': False,
+                'weight_decay': 1e-4,
+                'use_balanced_sampler': False,
+                'use_class_weights': False
             }
         else:
             self.config = {
-                'max_features': 5000,
-                'max_length': 1000,
+                'max_features': 20000,
+                'max_length': 512,
+                'embedding_dim': 200,
                 'hidden_size': 128,
                 'num_layers': 2,
-                'dropout': 0.5,
+                'dropout': 0.3,
                 'learning_rate': 0.001,
-                'num_epochs': 10,
+                'num_epochs': 12,
                 'batch_size': 32,
-                'early_stopping_patience': 5,
+                'early_stopping_patience': 6,
                 'gradient_clip': None,
                 'scheduler_patience': 3,
-                'scheduler_factor': 0.5
+                'scheduler_factor': 0.5,
+                'use_focal_loss': False,
+                'weight_decay': 1e-4,
+                'use_balanced_sampler': False,
+                'use_class_weights': False
             }
         
         self.vectorizer = None
@@ -189,35 +306,25 @@ class BiLSTMTrainer:
         print(f"🚀 BiLSTMTrainer - GPU: {'✅' if self.use_gpu else '❌'}")
     
     def prepare_data(self, texts, labels):
-        """Chuẩn bị data cho training"""
-        print("🔄 Chuẩn bị data...")
-        
-        # TF-IDF Vectorization
-        self.vectorizer = TfidfVectorizer(
-            max_features=self.config['max_features'],
-            min_df=2, max_df=0.95, ngram_range=(1, 2)
-        )
-        
-        # Fit vectorizer
-        X_tfidf = self.vectorizer.fit_transform(texts)
-        print(f"📊 TF-IDF features: {X_tfidf.shape[1]}")
-        
-        # Encode labels
+        """Chuẩn bị data (token IDs) cho training"""
+        print("🔄 Chuẩn bị data (token IDs)...")
+        self.tokenizer = SimpleTokenizer(max_vocab_size=self.config['max_features'])
+        self.tokenizer.fit(texts)
+        sequences = self.tokenizer.texts_to_ids(texts, self.config['max_length'])
         self.label_encoder = LabelEncoder()
         y_encoded = self.label_encoder.fit_transform(labels)
         num_classes = len(self.label_encoder.classes_)
-        
-        print(f"📊 Số classes: {num_classes}")
-        print(f"📊 Classes: {self.label_encoder.classes_}")
-        
-        return X_tfidf, y_encoded, num_classes
+        print(f"📊 Vocab size: {self.tokenizer.vocab_size}")
+        return sequences, y_encoded, num_classes
     
-    def create_model(self, input_size, num_classes):
-        """Tạo BiLSTM model"""
+    def create_model(self, vocab_size, num_classes):
+        """Tạo BiLSTM model (Embedding)"""
         print("🏗️ Tạo BiLSTM model...")
         
-        self.model = BiLSTMClassifier(
-            input_size=input_size, hidden_size=self.config['hidden_size'],
+        self.model = BiLSTMTokenClassifier(
+            vocab_size=vocab_size,
+            embedding_dim=self.config['embedding_dim'],
+            hidden_size=self.config['hidden_size'],
             num_layers=self.config['num_layers'], num_classes=num_classes,
             dropout=self.config['dropout']
         )
@@ -227,10 +334,8 @@ class BiLSTMTrainer:
         
         # GPU optimization
         if self.use_gpu:
-            if self.config['gradient_clip']:
-                self.model = self.model.half()
             torch.cuda.empty_cache()
-            print(f"🚀 Model đã được tối ưu cho GPU")
+            print(f"🚀 Model đã được tối ưu cho GPU (AMP)")
         
         # Model summary
         total_params = sum(p.numel() for p in self.model.parameters())
@@ -242,13 +347,16 @@ class BiLSTMTrainer:
         
         return self.model
     
-    def train_model(self, train_loader, val_loader, num_classes):
+    def train_model(self, train_loader, val_loader, num_classes, class_weights=None):
         """Training model"""
         print("🏋️ Bắt đầu training...")
         
         # Loss function và optimizer
-        criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(self.model.parameters(), lr=self.config['learning_rate'])
+        if self.config.get('use_focal_loss', False):
+            criterion = FocalLoss(weight=class_weights.to(self.device) if class_weights is not None else None)
+        else:
+            criterion = nn.CrossEntropyLoss(weight=class_weights.to(self.device) if class_weights is not None else None)
+        optimizer = optim.Adam(self.model.parameters(), lr=self.config['learning_rate'], weight_decay=self.config.get('weight_decay', 0.0))
         
         # Learning rate scheduler
         scheduler = optim.lr_scheduler.ReduceLROnPlateau(
@@ -266,10 +374,13 @@ class BiLSTMTrainer:
         print(f"🏋️ Bắt đầu training BiLSTM với {self.config['num_epochs']} epochs...")
         print("📊 Progress: Khởi tạo training loop...")
         
+        # AMP scaler
+        scaler = torch.cuda.amp.GradScaler(enabled=self.use_gpu)
+
         for epoch in range(self.config['num_epochs']):
-            # Progress tracking
-            epoch_progress = ((epoch + 1) / self.config['num_epochs']) * 80  # 80% for training
-            print(f"⏳ {epoch_progress:.1f}% - Epoch {epoch+1}/{self.config['num_epochs']}")
+            # Progress tracking (training portion at 100%)
+            training_progress = ((epoch + 1) / self.config['num_epochs']) * 100
+            print(f"⏳ {training_progress:.1f}% - Epoch {epoch+1}/{self.config['num_epochs']}")
             
             # Training phase
             self.model.train()
@@ -280,24 +391,26 @@ class BiLSTMTrainer:
                 batch_labels = batch_labels.squeeze().to(self.device)
                 
                 optimizer.zero_grad()
-                outputs = self.model(batch_features)
-                loss = criterion(outputs, batch_labels)
+                
+                with torch.cuda.amp.autocast(enabled=self.use_gpu):
+                    outputs = self.model(batch_features)
+                    loss = criterion(outputs, batch_labels)
                 
                 if self.use_gpu:
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['gradient_clip'])
+                    scaler.scale(loss).backward()
+                    if self.config['gradient_clip']:
+                        scaler.unscale_(optimizer)
+                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config['gradient_clip'])
+                    scaler.step(optimizer)
+                    scaler.update()
                 else:
                     loss.backward()
-                
-                optimizer.step()
+                    optimizer.step()
                 train_loss += loss.item()
                 
                 # Mini-batch progress
                 if batch_idx % 10 == 0:
-                    batch_progress = (batch_idx / len(train_loader)) * 10  # 10% of epoch
-                    total_progress = epoch_progress + batch_progress
-                    if total_progress <= 80:  # Don't exceed 80% during training
-                        print(f"    ⏳ {total_progress:.1f}% - Batch {batch_idx}/{len(train_loader)}")
+                    print(f"    ⏳ Batch {batch_idx}/{len(train_loader)}")
             
             # Validation phase
             self.model.eval()
@@ -310,8 +423,9 @@ class BiLSTMTrainer:
                     batch_features = batch_features.to(self.device)
                     batch_labels = batch_labels.squeeze().to(self.device)
                     
-                    outputs = self.model(batch_features)
-                    loss = criterion(outputs, batch_labels)
+                    with torch.cuda.amp.autocast(enabled=self.use_gpu):
+                        outputs = self.model(batch_features)
+                        loss = criterion(outputs, batch_labels)
                     val_loss += loss.item()
                     
                     _, predicted = torch.max(outputs.data, 1)
@@ -336,7 +450,7 @@ class BiLSTMTrainer:
                 patience_counter = 0
                 base_dir = "/content/viLegalBert"
                 torch.save(self.model.state_dict(), f'{base_dir}/best_bilstm_model.pth')
-                print(f"    ✅ {epoch_progress:.1f}% - Best model saved!")
+                print(f"    ✅ Best model saved!")
             else:
                 patience_counter += 1
             
@@ -354,11 +468,11 @@ class BiLSTMTrainer:
                 print(f"    🛑 Early stopping at epoch {epoch+1}")
                 break
         
-        print("✅ 80% - Training epochs hoàn thành!")
+        print("✅ 100% - Training epochs hoàn thành!")
         
         # Load best model
         print("📊 Progress: Load best model...")
-        print("⏳ 90% - Loading best model...")
+        print("⏳ Loading best model...")
         base_dir = "/content/viLegalBert"
         best_model_path = f'{base_dir}/best_bilstm_model.pth'
         if os.path.exists(best_model_path):
@@ -386,7 +500,7 @@ class BiLSTMTrainer:
         texts_val = df_val['text'].fillna('').tolist()
         
         # Chuẩn bị dữ liệu
-        print("📊 Chuẩn bị dữ liệu...")
+        print("📊 Chuẩn bị dữ liệu (token IDs)...")
         
         # Encode labels
         self.label_encoder = LabelEncoder()
@@ -398,54 +512,42 @@ class BiLSTMTrainer:
         print(f"📊 Train samples: {len(texts_train)}")
         print(f"📊 Validation samples: {len(texts_val)}")
         
-        # TF-IDF Vectorization
-        self.vectorizer = TfidfVectorizer(
-            max_features=self.config['max_features'],
-            ngram_range=(1, 2),
-            stop_words=None
+        # Tokenizer & sequences
+        self.tokenizer, train_seq, val_seq = DataUtils.create_tokenizer_and_sequences(
+            texts_train, texts_val, self.config['max_features'], self.config['max_length']
         )
-        
-        # Fit trên training data
-        self.vectorizer.fit(texts_train)
         
         # Datasets
-        train_dataset = TextDataset(texts_train, labels_train, self.vectorizer, self.config['max_length'])
-        val_dataset = TextDataset(texts_val, labels_val, self.vectorizer, self.config['max_length'])
+        train_dataset = TokenDataset(train_seq, labels_train)
+        val_dataset = TokenDataset(val_seq, labels_val)
         
         # Create model
-        self.create_model(self.vectorizer.transform(texts_train).shape[1], num_classes)
+        self.create_model(self.tokenizer.vocab_size, num_classes)
         
-        # Split data
-        X_train, X_val, y_train, y_val = train_test_split(
-            self.vectorizer.transform(texts_train).toarray(), labels_train, test_size=0.2, random_state=42, stratify=labels_train
-        )
-        
-        # Create datasets
-        train_dataset = TextDataset(
-            [texts_train[i] for i in np.where(X_train.sum(axis=1) > 0)[0]],
-            y_train, self.vectorizer, self.config['max_length']
-        )
-        
-        val_dataset = TextDataset(
-            [texts_val[i] for i in np.where(X_val.sum(axis=1) > 0)[0]],
-            y_val, self.vectorizer, self.config['max_length']
-        )
+        # Dùng trực tiếp train/val datasets đã có thay vì tự split lại
         
         # Create dataloaders
-        train_loader = DataLoader(
-            train_dataset, batch_size=self.config['batch_size'], shuffle=True,
-            pin_memory=True if self.use_gpu else False, num_workers=4 if self.use_gpu else 2
+        if self.config.get('use_balanced_sampler', False):
+            train_loader = DataUtils.create_balanced_train_loader(
+                train_dataset, labels_train, self.config['batch_size'], self.use_gpu
+            )
+        else:
+            from torch.utils.data import DataLoader
+            train_loader = DataLoader(
+                train_dataset, batch_size=self.config['batch_size'], shuffle=True,
+                pin_memory=True if self.use_gpu else False, num_workers=4 if self.use_gpu else 2
+            )
+        val_loader = DataUtils.create_val_loader(
+            val_dataset, self.config['batch_size'], self.use_gpu
         )
         
-        val_loader = DataLoader(
-            val_dataset, batch_size=self.config['batch_size'], shuffle=False,
-            pin_memory=True if self.use_gpu else False, num_workers=4 if self.use_gpu else 2
-        )
-        
+        # Class weights to handle imbalance
+        weights = DataUtils.compute_class_weights(labels_train, num_classes) if self.config.get('use_class_weights', False) else None
+
         # Training
         print("📊 Progress: Bắt đầu training pipeline...")
         print("⏳ 0% - Chuẩn bị training...")
-        history = self.train_model(train_loader, val_loader, num_classes)
+        history = self.train_model(train_loader, val_loader, num_classes, class_weights=weights)
         print("⏳ 85% - Training model hoàn thành!")
         
         # Save model
@@ -456,13 +558,7 @@ class BiLSTMTrainer:
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
         
         print("⏳ 95% - Lưu model state và config...")
-        model_data = {
-            'model_state_dict': self.model.state_dict(),
-            'vectorizer': self.vectorizer,
-            'label_encoder': self.label_encoder,
-            'config': self.config,
-            'gpu_optimized': self.use_gpu
-        }
+        model_data = DataUtils.build_artifacts_dict(self.model, self.tokenizer, self.label_encoder, self.config, self.use_gpu)
         
         with open(model_path, 'wb') as f:
             pickle.dump(model_data, f)
@@ -489,7 +585,7 @@ class BiLSTMTrainer:
         texts_val = df_val['text'].fillna('').tolist()
         
         # Chuẩn bị dữ liệu
-        print("📊 Chuẩn bị dữ liệu...")
+        print("📊 Chuẩn bị dữ liệu (token IDs)...")
         
         # Encode labels
         self.label_encoder = LabelEncoder()
@@ -501,54 +597,42 @@ class BiLSTMTrainer:
         print(f"📊 Train samples: {len(texts_train)}")
         print(f"📊 Validation samples: {len(texts_val)}")
         
-        # TF-IDF Vectorization
-        self.vectorizer = TfidfVectorizer(
-            max_features=self.config['max_features'],
-            ngram_range=(1, 2),
-            stop_words=None
+        # Tokenizer & sequences
+        self.tokenizer, train_seq, val_seq = DataUtils.create_tokenizer_and_sequences(
+            texts_train, texts_val, self.config['max_features'], self.config['max_length']
         )
-        
-        # Fit trên training data
-        self.vectorizer.fit(texts_train)
         
         # Datasets
-        train_dataset = TextDataset(texts_train, labels_train, self.vectorizer, self.config['max_length'])
-        val_dataset = TextDataset(texts_val, labels_val, self.vectorizer, self.config['max_length'])
+        train_dataset = TokenDataset(train_seq, labels_train)
+        val_dataset = TokenDataset(val_seq, labels_val)
         
         # Create model
-        self.create_model(self.vectorizer.transform(texts_train).shape[1], num_classes)
+        self.create_model(self.tokenizer.vocab_size, num_classes)
         
-        # Split data
-        X_train, X_val, y_train, y_val = train_test_split(
-            self.vectorizer.transform(texts_train).toarray(), labels_train, test_size=0.2, random_state=42, stratify=labels_train
-        )
-        
-        # Create datasets
-        train_dataset = TextDataset(
-            [texts_train[i] for i in np.where(X_train.sum(axis=1) > 0)[0]],
-            y_train, self.vectorizer, self.config['max_length']
-        )
-        
-        val_dataset = TextDataset(
-            [texts_val[i] for i in np.where(X_val.sum(axis=1) > 0)[0]],
-            y_val, self.vectorizer, self.config['max_length']
-        )
+        # Dùng trực tiếp train/val datasets đã có thay vì tự split lại
         
         # Create dataloaders
-        train_loader = DataLoader(
-            train_dataset, batch_size=self.config['batch_size'], shuffle=True,
-            pin_memory=True if self.use_gpu else False, num_workers=4 if self.use_gpu else 2
+        if self.config.get('use_balanced_sampler', False):
+            train_loader = DataUtils.create_balanced_train_loader(
+                train_dataset, labels_train, self.config['batch_size'], self.use_gpu
+            )
+        else:
+            from torch.utils.data import DataLoader
+            train_loader = DataLoader(
+                train_dataset, batch_size=self.config['batch_size'], shuffle=True,
+                pin_memory=True if self.use_gpu else False, num_workers=4 if self.use_gpu else 2
+            )
+        val_loader = DataUtils.create_val_loader(
+            val_dataset, self.config['batch_size'], self.use_gpu
         )
         
-        val_loader = DataLoader(
-            val_dataset, batch_size=self.config['batch_size'], shuffle=False,
-            pin_memory=True if self.use_gpu else False, num_workers=4 if self.use_gpu else 2
-        )
-        
+        # Class weights to handle imbalance
+        weights = DataUtils.compute_class_weights(labels_train, num_classes) if self.config.get('use_class_weights', False) else None
+
         # Training
         print("📊 Progress: Bắt đầu training pipeline Level 2...")
         print("⏳ 0% - Chuẩn bị training...")
-        history = self.train_model(train_loader, val_loader, num_classes)
+        history = self.train_model(train_loader, val_loader, num_classes, class_weights=weights)
         print("⏳ 85% - Training model hoàn thành!")
         
         # Save model
@@ -559,13 +643,7 @@ class BiLSTMTrainer:
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
         
         print("⏳ 95% - Lưu model state và config...")
-        model_data = {
-            'model_state_dict': self.model.state_dict(),
-            'vectorizer': self.vectorizer,
-            'label_encoder': self.label_encoder,
-            'config': self.config,
-            'gpu_optimized': self.use_gpu
-        }
+        model_data = DataUtils.build_artifacts_dict(self.model, self.tokenizer, self.label_encoder, self.config, self.use_gpu)
         
         with open(model_path, 'wb') as f:
             pickle.dump(model_data, f)

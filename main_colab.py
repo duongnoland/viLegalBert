@@ -294,74 +294,6 @@ class SVMTrainer:
         
         print(f"💾 Model đã lưu: {model_path}")
         return {'accuracy': accuracy, 'model_path': model_path, 'gpu_optimized': self.use_gpu}
-
-# ============================================================================
-# 📊 EVALUATION
-# ============================================================================
-
-def evaluate_models(test_path):
-    """Đánh giá models trên test set"""
-    print("📊 Đánh giá models...")
-    
-    # Base directory cho Google Colab
-    base_dir = "/content/viLegalBert"
-    
-    # Load test data
-    test_df = pd.read_csv(test_path, encoding='utf-8')
-    X_test = test_df['text'].fillna('')
-    y_test_level1 = test_df['type_level1']
-    y_test_level2 = test_df['domain_level2']
-    
-    try:
-        # Load và evaluate Level 1
-        level1_model_path = f"{base_dir}/models/saved_models/level1_classifier/svm_level1/svm_level1_model.pkl"
-        with open(level1_model_path, 'rb') as f:
-            level1_data = pickle.load(f)
-        
-        level1_model = level1_data['model']
-        level1_vectorizer = level1_data['vectorizer']
-        level1_feature_selector = level1_data['feature_selector']
-        
-        X_test_level1 = level1_vectorizer.transform(X_test)
-        X_test_level1_selected = level1_feature_selector.transform(X_test_level1)
-        y_pred_level1 = level1_model.predict(X_test_level1_selected)
-        
-        accuracy_level1 = accuracy_score(y_test_level1, y_pred_level1)
-        print(f"🏷️ Level 1 Test Accuracy: {accuracy_level1:.4f}")
-        
-        # Load và evaluate Level 2
-        level2_model_path = f"{base_dir}/models/saved_models/level2_classifier/svm_level2/svm_level2_model.pkl"
-        with open(level2_model_path, 'rb') as f:
-            level2_data = pickle.load(f)
-        
-        level2_model = level2_data['model']
-        level2_vectorizer = level2_data['vectorizer']
-        level2_feature_selector = level2_data['feature_selector']
-        
-        X_test_level2 = level2_vectorizer.transform(X_test)
-        X_test_level2_selected = level2_feature_selector.transform(X_test_level2)
-        y_pred_level2 = level2_model.predict(X_test_level2_selected)
-        
-        accuracy_level2 = accuracy_score(y_test_level2, y_pred_level2)
-        print(f"🏷️ Level 2 Test Accuracy: {accuracy_level2:.4f}")
-        
-        # Lưu kết quả
-        results = {
-            'level1': {'accuracy': accuracy_level1, 'gpu_optimized': level1_data.get('gpu_optimized', False)},
-            'level2': {'accuracy': accuracy_level2, 'gpu_optimized': level2_data.get('gpu_optimized', False)}
-        }
-        
-        results_path = f"{base_dir}/results/evaluation_results/svm_evaluation_results.pkl"
-        with open(results_path, 'wb') as f:
-            pickle.dump(results, f)
-        
-        print(f"💾 Kết quả đã lưu: {results_path}")
-        return results
-        
-    except Exception as e:
-        print(f"❌ Lỗi khi đánh giá: {e}")
-        return None
-
 # ============================================================================
 # 🚀 MAIN PIPELINE
 # ============================================================================
@@ -402,10 +334,6 @@ def main():
     
     results_level1 = trainer.train_level1(train_path, val_path)  # Truyền cả train và val
     results_level2 = trainer.train_level2(train_path, val_path)  # Truyền cả train và val
-    
-    # Bước 6: Evaluation
-    print("\n📊 BƯỚC 6: EVALUATION")
-    evaluate_models(f"{base_dir}/data/processed/dataset_splits/test.csv")
     
     # Tóm tắt
     print("\n🎉 PIPELINE HOÀN THÀNH!")

@@ -87,24 +87,26 @@ class PhoBERTTrainer:
                 'max_length': 512,
                 'batch_size': 16,
                 'learning_rate': 2e-5,
-                'num_epochs': 3,
+                'num_epochs': 20,
                 'warmup_steps': 500,
                 'weight_decay': 0.01,
                 'gradient_accumulation_steps': 2,
                 'fp16': True,
-                'dataloader_num_workers': 4
+                'dataloader_num_workers': 4,
+                'use_class_weights': False
             }
         else:
             self.config = {
                 'max_length': 512,
                 'batch_size': 8,
                 'learning_rate': 2e-5,
-                'num_epochs': 3,
+                'num_epochs': 20,
                 'warmup_steps': 500,
                 'weight_decay': 0.01,
                 'gradient_accumulation_steps': 1,
                 'fp16': False,
-                'dataloader_num_workers': 2
+                'dataloader_num_workers': 2,
+                'use_class_weights': False
             }
         
         print(f"🚀 PhoBERTTrainer - GPU: {'✅' if self.use_gpu else '❌'}")
@@ -123,10 +125,8 @@ class PhoBERTTrainer:
         
         # GPU optimization
         if self.use_gpu:
-            if self.config['fp16']:
-                self.model = self.model.half()
             torch.cuda.empty_cache()
-            print(f"🚀 Model đã được tối ưu cho GPU")
+            print(f"🚀 Model đã được tối ưu cho GPU (AMP)")
         
         print(f"✅ Đã load PhoBERT")
         print(f"🚀 Device: {self.device}")
@@ -146,7 +146,53 @@ class PhoBERTTrainer:
         })
         
         return dataset
-    
+
+    def _make_training_args(self, output_dir: str) -> TrainingArguments:
+        """Tạo TrainingArguments tương thích nhiều phiên bản transformers.
+        Thử full cấu hình trước, nếu lỗi TypeError (keyword không hỗ trợ) thì hạ bớt tham số.
+        """
+        common_kwargs = dict(
+            output_dir=output_dir,
+            num_train_epochs=self.config['num_epochs'],
+            per_device_train_batch_size=self.config['batch_size'],
+            per_device_eval_batch_size=self.config['batch_size'],
+            warmup_steps=self.config['warmup_steps'],
+            weight_decay=self.config['weight_decay'],
+            logging_dir=output_dir + "_logs",
+            logging_steps=100,
+        )
+        # Attempt 1: newest API
+        try:
+            return TrainingArguments(
+                evaluation_strategy="steps",
+                eval_steps=500,
+                save_steps=1000,
+                save_strategy="steps",
+                load_best_model_at_end=True,
+                metric_for_best_model="eval_f1",
+                greater_is_better=True,
+                save_total_limit=3,
+                gradient_accumulation_steps=self.config['gradient_accumulation_steps'],
+                fp16=self.config['fp16'],
+                dataloader_num_workers=self.config['dataloader_num_workers'],
+                report_to=None,
+                remove_unused_columns=False,
+                **common_kwargs,
+            )
+        except TypeError:
+            pass
+        # Attempt 2: mid/older API without evaluation/save strategy support
+        try:
+            return TrainingArguments(
+                gradient_accumulation_steps=self.config['gradient_accumulation_steps'],
+                fp16=self.config['fp16'],
+                **common_kwargs,
+            )
+        except TypeError:
+            pass
+        # Attempt 3: minimal API
+        return TrainingArguments(**common_kwargs)
+
     def train_level1(self, data_path, val_path):
         """Training cho Level 1"""
         print("🏷️ Training Level 1...")
@@ -162,7 +208,7 @@ class PhoBERTTrainer:
         num_labels = len(label_encoder.classes_)
         
         print(f"📊 Số labels: {num_labels}")
-        print(f"📊 Classes: {label_encoder.classes_}")
+        print(f"📊 Classes: {list(label_encoder.classes_)}")
         
         # Load model
         self.load_model(num_labels)
@@ -177,38 +223,41 @@ class PhoBERTTrainer:
         
         val_dataset = self.prepare_dataset(val_texts, val_labels, self.config['max_length'])
         
+        # Tính class weights (tùy chọn)
+        class_weights_tensor = None
+        if self.config.get('use_class_weights', False):
+            import numpy as np
+            unique, counts = np.unique(labels, return_counts=True)
+            freq = dict(zip(unique, counts))
+            weights = np.array([1.0 / max(freq.get(i, 1), 1) for i in range(num_labels)], dtype=np.float32)
+            weights = weights * (len(labels) / weights.sum())
+            class_weights_tensor = torch.tensor(weights, dtype=torch.float32, device=self.device)
+            print(f"⚖️ Sử dụng class weights cho loss")
+        
         # Cấu hình training
         base_dir = "/content/viLegalBert"
-        training_args = TrainingArguments(
-            output_dir=f"{base_dir}/phobert_level1_results",
-            num_train_epochs=self.config['num_epochs'],
-            per_device_train_batch_size=self.config['batch_size'],
-            per_device_eval_batch_size=self.config['batch_size'],
-            warmup_steps=self.config['warmup_steps'],
-            weight_decay=self.config['weight_decay'],
-            logging_dir=f"{base_dir}/phobert_level1_logs",
-            logging_steps=100,
-            evaluation_strategy="steps",
-            eval_steps=500,
-            save_steps=1000,
-            save_strategy="steps",
-            load_best_model_at_end=True,
-            metric_for_best_model="eval_loss",
-            greater_is_better=False,
-            save_total_limit=3,
-            gradient_accumulation_steps=self.config['gradient_accumulation_steps'],
-            fp16=self.config['fp16'],
-            dataloader_num_workers=self.config['dataloader_num_workers'],
-            report_to=None,
-            dataloader_pin_memory=True if self.use_gpu else False,
-            remove_unused_columns=False
-        )
+        training_args = self._make_training_args(output_dir=f"{base_dir}/phobert_level1_results")
         
         # Data collator và trainer
         data_collator = DataCollatorWithPadding(tokenizer=self.tokenizer)
-        trainer = Trainer(
-            model=self.model, args=training_args, train_dataset=train_dataset,
-            eval_dataset=val_dataset, tokenizer=self.tokenizer, data_collator=data_collator
+        from sklearn.metrics import accuracy_score, f1_score
+        def compute_metrics(eval_pred):
+            import numpy as np
+            logits, labels_np = eval_pred
+            preds = np.argmax(logits, axis=1)
+            return {
+                'accuracy': accuracy_score(labels_np, preds),
+                'f1': f1_score(labels_np, preds, average='weighted')
+            }
+        trainer = WeightedTrainer(
+            model=self.model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=val_dataset,
+            tokenizer=self.tokenizer,
+            data_collator=data_collator,
+            compute_metrics=compute_metrics,
+            class_weights=class_weights_tensor
         )
         
         # Training
@@ -228,11 +277,20 @@ class PhoBERTTrainer:
         print("⏳ 90% - Chạy evaluation...")
         eval_results = trainer.evaluate()
         print("✅ 95% - Evaluation hoàn thành!")
+
+        # Classification report (validation)
+        try:
+            from sklearn.metrics import classification_report
+            pred_out = trainer.predict(val_dataset)
+            import numpy as np
+            preds = np.argmax(pred_out.predictions, axis=1)
+            print(classification_report(val_labels, preds, target_names=label_encoder.classes_))
+        except Exception:
+            pass
         
         # Lưu model
         print("📊 Progress: Lưu model...")
         print("⏳ 98% - Lưu model và tokenizer...")
-        base_dir = "/content/viLegalBert"
         model_path = f"{base_dir}/models/saved_models/level1_classifier/phobert_level1/phobert_level1_model"
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
         
@@ -254,7 +312,7 @@ class PhoBERTTrainer:
             'label_encoder': label_encoder,
             'gpu_optimized': self.use_gpu
         }
-    
+
     def train_level2(self, data_path, val_path):
         """Training cho Level 2"""
         print("🏷️ Training Level 2...")
@@ -270,7 +328,7 @@ class PhoBERTTrainer:
         num_labels = len(label_encoder.classes_)
         
         print(f"📊 Số labels: {num_labels}")
-        print(f"📊 Classes: {label_encoder.classes_}")
+        print(f"📊 Classes: {list(label_encoder.classes_)}")
         
         # Load model
         self.load_model(num_labels)
@@ -285,38 +343,41 @@ class PhoBERTTrainer:
         
         val_dataset = self.prepare_dataset(val_texts, val_labels, self.config['max_length'])
         
+        # Tính class weights (tùy chọn)
+        class_weights_tensor = None
+        if self.config.get('use_class_weights', False):
+            import numpy as np
+            unique, counts = np.unique(labels, return_counts=True)
+            freq = dict(zip(unique, counts))
+            weights = np.array([1.0 / max(freq.get(i, 1), 1) for i in range(num_labels)], dtype=np.float32)
+            weights = weights * (len(labels) / weights.sum())
+            class_weights_tensor = torch.tensor(weights, dtype=torch.float32, device=self.device)
+            print(f"⚖️ Sử dụng class weights cho loss")
+        
         # Cấu hình training
         base_dir = "/content/viLegalBert"
-        training_args = TrainingArguments(
-            output_dir=f"{base_dir}/phobert_level2_results",
-            num_train_epochs=self.config['num_epochs'],
-            per_device_train_batch_size=self.config['batch_size'],
-            per_device_eval_batch_size=self.config['batch_size'],
-            warmup_steps=self.config['warmup_steps'],
-            weight_decay=self.config['weight_decay'],
-            logging_dir=f"{base_dir}/phobert_level2_logs",
-            logging_steps=100,
-            evaluation_strategy="steps",
-            eval_steps=500,
-            save_steps=1000,
-            save_strategy="steps",
-            load_best_model_at_end=True,
-            metric_for_best_model="eval_loss",
-            greater_is_better=False,
-            save_total_limit=3,
-            gradient_accumulation_steps=self.config['gradient_accumulation_steps'],
-            fp16=self.config['fp16'],
-            dataloader_num_workers=self.config['dataloader_num_workers'],
-            report_to=None,
-            dataloader_pin_memory=True if self.use_gpu else False,
-            remove_unused_columns=False
-        )
+        training_args = self._make_training_args(output_dir=f"{base_dir}/phobert_level2_results")
         
         # Data collator và trainer
         data_collator = DataCollatorWithPadding(tokenizer=self.tokenizer)
-        trainer = Trainer(
-            model=self.model, args=training_args, train_dataset=train_dataset,
-            eval_dataset=val_dataset, tokenizer=self.tokenizer, data_collator=data_collator
+        from sklearn.metrics import accuracy_score, f1_score
+        def compute_metrics(eval_pred):
+            import numpy as np
+            logits, labels_np = eval_pred
+            preds = np.argmax(logits, axis=1)
+            return {
+                'accuracy': accuracy_score(labels_np, preds),
+                'f1': f1_score(labels_np, preds, average='weighted')
+            }
+        trainer = WeightedTrainer(
+            model=self.model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=val_dataset,
+            tokenizer=self.tokenizer,
+            data_collator=data_collator,
+            compute_metrics=compute_metrics,
+            class_weights=class_weights_tensor
         )
         
         # Training
@@ -336,11 +397,20 @@ class PhoBERTTrainer:
         print("⏳ 90% - Chạy evaluation...")
         eval_results = trainer.evaluate()
         print("✅ 95% - Evaluation hoàn thành!")
+
+        # Classification report (validation)
+        try:
+            from sklearn.metrics import classification_report
+            pred_out = trainer.predict(val_dataset)
+            import numpy as np
+            preds = np.argmax(pred_out.predictions, axis=1)
+            print(classification_report(val_labels, preds, target_names=label_encoder.classes_))
+        except Exception:
+            pass
         
         # Lưu model
         print("📊 Progress: Lưu model...")
         print("⏳ 98% - Lưu model và tokenizer...")
-        base_dir = "/content/viLegalBert"
         model_path = f"{base_dir}/models/saved_models/level2_classifier/phobert_level2/phobert_level2_model"
         os.makedirs(os.path.dirname(model_path), exist_ok=True)
         
@@ -362,6 +432,24 @@ class PhoBERTTrainer:
             'label_encoder': label_encoder,
             'gpu_optimized': self.use_gpu
         }
+
+
+class WeightedTrainer(Trainer):
+    """Trainer mở rộng hỗ trợ class weights cho CrossEntropyLoss."""
+    def __init__(self, *args, class_weights: torch.Tensor = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.class_weights = class_weights
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        labels = inputs.pop("labels")
+        outputs = model(**inputs)
+        logits = outputs.get("logits") if isinstance(outputs, dict) else outputs.logits
+        if self.class_weights is not None:
+            loss_fct = torch.nn.CrossEntropyLoss(weight=self.class_weights.to(logits.device))
+        else:
+            loss_fct = torch.nn.CrossEntropyLoss()
+        loss = loss_fct(logits.view(-1, model.config.num_labels), labels.view(-1))
+        return (loss, outputs) if return_outputs else loss
 
 def main():
     """Hàm chính"""
