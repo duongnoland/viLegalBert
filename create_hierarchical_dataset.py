@@ -11,7 +11,7 @@ def clean_text(text):
         return ""
     
     # Loại bỏ ký tự đặc biệt và chuẩn hóa khoảng trắng
-    text = re.sub(r'\s+', ' ', text.strip())
+    text = re.sub(r'\s+', ' ', str(text).strip())
     text = re.sub(r'[^\w\s\-\.\,\;\:\!\?\(\)\[\]\{\}]', '', text)
     return text
 
@@ -20,7 +20,7 @@ def extract_document_type(type_text):
     if not type_text:
         return "KHÁC"
     
-    type_text = type_text.upper().strip()
+    type_text = str(type_text).upper().strip()
     
     # Mapping các loại văn bản cơ bản
     type_mapping = {
@@ -142,12 +142,11 @@ def extract_legal_domain(content, name, chapter_name):
     # Trả về domain có điểm cao nhất
     if domain_scores:
         best_domain = max(domain_scores, key=domain_scores.get)
-        print(f"🔍 Domain được chọn: {best_domain} (điểm: {domain_scores[best_domain]})")
         return best_domain
     
     return "KHÁC"
 
-def create_hierarchical_dataset(json_file_path, output_csv_path, target_size=10000):
+def create_hierarchical_dataset(json_file_path, output_csv_path, target_size=5000):
     """Tạo dataset phân cấp 2 tầng từ file JSON"""
     
     print(f"🚀 Bắt đầu tạo dataset từ file: {json_file_path}")
@@ -175,7 +174,7 @@ def create_hierarchical_dataset(json_file_path, output_csv_path, target_size=100
     
     for item in sampled_data:
         try:
-            # Trích xuất thông tin cơ bản
+            # Trích xuất thông tin cơ bản theo cấu trúc JSON thực tế
             doc_id = item.get('id', '')
             doc_type = extract_document_type(item.get('type', ''))
             doc_name = clean_text(item.get('name', ''))
@@ -184,23 +183,22 @@ def create_hierarchical_dataset(json_file_path, output_csv_path, target_size=100
             article = clean_text(item.get('article', ''))
             content = clean_text(item.get('content', ''))
             
-            # Tạo văn bản đầy đủ để phân loại
+            # Tạo văn bản đầy đủ để phân loại (giới hạn 500 ký tự)
             full_text = f"{doc_name} {chapter_name} {article} {content}"
+            full_text = full_text[:500]  # Giới hạn 500 ký tự
             
             # Trích xuất domain pháp lý
             legal_domain = extract_legal_domain(content, doc_name, chapter_name)
             
-            # Tạo item cho dataset
+            # Tạo item cho dataset (đã loại bỏ content_length và chapter theo yêu cầu)
             dataset_item = {
                 'id': doc_id,
                 'text': full_text,
                 'type_level1': doc_type,  # Tầng 1: Loại văn bản cơ bản
                 'domain_level2': legal_domain,  # Tầng 2: Domain pháp lý
                 'ministry': ministry,
-                'name': doc_name,
-                'chapter': chapter_name,
-                'article': article,
-                'content_length': len(content)
+                'name': doc_name[:500],  # Giới hạn 500 ký tự
+                'article': article[:500]  # Giới hạn 500 ký tự
             }
             
             dataset_items.append(dataset_item)
@@ -293,8 +291,8 @@ if __name__ == "__main__":
     print(f"✅ Tìm thấy file JSON: {json_file}")
     
     try:
-        # Tạo dataset chính
-        df = create_hierarchical_dataset(json_file, output_csv, target_size=10000)
+        # Tạo dataset chính với tổng số 5000 records
+        df = create_hierarchical_dataset(json_file, output_csv, target_size=5000)
         
         # Tạo các tập train/validation/test
         create_training_splits(output_csv, splits_dir)
