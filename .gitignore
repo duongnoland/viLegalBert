@@ -25,6 +25,7 @@ wheels/
 *.egg
 MANIFEST
 data/raw
+results/
 
 # ============================================================================
 # VIRTUAL ENVIRONMENTS
